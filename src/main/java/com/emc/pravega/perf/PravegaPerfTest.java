@@ -19,6 +19,7 @@ package com.emc.pravega.perf;
 
 import com.emc.pravega.ClientFactory;
 import com.emc.pravega.StreamManager;
+import com.emc.pravega.stream.AckFuture;
 import com.emc.pravega.stream.EventRead;
 import com.emc.pravega.stream.EventStreamReader;
 import com.emc.pravega.stream.EventStreamWriter;
@@ -29,9 +30,7 @@ import com.emc.pravega.stream.ScalingPolicy;
 import com.emc.pravega.stream.StreamConfiguration;
 import com.emc.pravega.stream.Transaction;
 import com.emc.pravega.stream.TxnFailedException;
-import com.emc.pravega.stream.impl.ClientFactoryImpl;
 import com.emc.pravega.stream.impl.JavaSerializer;
-import com.emc.pravega.stream.impl.StreamManagerImpl;
 import lombok.Cleanup;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -41,11 +40,9 @@ import org.apache.commons.cli.Options;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
@@ -75,6 +72,8 @@ public class PravegaPerfTest {
     // Should producers use Transaction or not
     private static boolean isTransaction = false;
     private static int reportingInterval = 200;
+    private static ExecutorService executor;
+    private static ExecutorService callbackExecutor;
 
 
     public static void main(String[] args) throws Exception {
@@ -102,8 +101,8 @@ public class PravegaPerfTest {
                         "is " + controllerUri));
 
         // Initialize executor
-        @Cleanup("shutdown")
-        ExecutorService executor = Executors.newFixedThreadPool(producerCount + 10);
+        executor = Executors.newFixedThreadPool(producerCount + 10);
+        callbackExecutor = Executors.newFixedThreadPool(producerCount + 10);
 
         try {
             @Cleanup
@@ -171,7 +170,6 @@ public class PravegaPerfTest {
         options.addOption("stream", true, "Stream name");
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
-        options.addOption("zipkin", true, "Enable zipkin trace");
         options.addOption("reporting", true, "Reporting internval");
 
         options.addOption("help", false, "Help message");
@@ -183,7 +181,7 @@ public class PravegaPerfTest {
             // Since it is command line sample producer, user inputs will be accepted from console
             if (commandline.hasOption("help")) {
                 HelpFormatter formatter = new HelpFormatter();
-                formatter.printHelp("integrationstests", options);
+                formatter.printHelp("pravega-benchmark", options);
                 System.exit(0);
             } else {
 
@@ -263,7 +261,7 @@ public class PravegaPerfTest {
          * This function will be executed in a loop and time behavior is measured.
          * @return A function which takes String key and data and returns a future object.
          */
-        BiFunction<String, String, Future> sendFunction() {
+        BiFunction<String, String, AckFuture> sendFunction() {
             return  ( key, data) -> producer.writeEvent(key, data);
         }
 
@@ -271,9 +269,9 @@ public class PravegaPerfTest {
          * Executes the given method over the producer with configured settings.
          * @param fn The function to execute.
          */
-        void runLoop(BiFunction<String, String, Future> fn) {
+        void runLoop(BiFunction<String, String, AckFuture> fn) {
 
-            Future<Void> retFuture = null;
+            AckFuture retFuture = null;
             for (int i = 0; i < secondsToRun; i++) {
                 int currentEventsPerSec = 0;
 
@@ -287,11 +285,11 @@ public class PravegaPerfTest {
                     // event ingestion
                     long now = System.currentTimeMillis();
                     retFuture = produceStats.runAndRecordTime(() -> {
-                                return (CompletableFuture<Void>) fn.apply(Integer.toString(producerId),
+                                return  fn.apply(Integer.toString(producerId),
                                         payload);
                             },
                             now,
-                            payload.length());
+                            payload.length(),callbackExecutor);
                     //If it is a blocking call, wait for the ack
                     if ( blocking ) {
                         try {
@@ -343,7 +341,7 @@ public class PravegaPerfTest {
             transaction = producer.beginTxn(60000,60000,60000);
         }
 
-        BiFunction<String, String, Future> sendFunction() {
+        BiFunction<String, String, AckFuture> sendFunction() {
             return  ( key, data) -> {
                 try {
                     transaction.writeEvent(key, data);
@@ -351,8 +349,9 @@ public class PravegaPerfTest {
                     System.out.println("Publish to transaction failed");
                     e.printStackTrace();
                 }
-                return CompletableFuture.completedFuture(null);
-            };
+                return null;
+
+          };
         }
     }
 
@@ -375,8 +374,8 @@ public class PravegaPerfTest {
                 do {
                     final EventRead<String> result = reader.readNextEvent(0);
                     produceStats.runAndRecordTime(() -> {
-                    return CompletableFuture.completedFuture(null);
-                }, Long.parseLong(result.getEvent()), 100);
+                    return null;
+                }, Long.parseLong(result.getEvent()), 100, callbackExecutor);
 
             } while ( totalEvents-- > 0 );
             } catch (ReinitializationRequiredException e) {
