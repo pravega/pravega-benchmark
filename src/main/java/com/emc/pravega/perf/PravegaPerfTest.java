@@ -40,6 +40,7 @@ import org.apache.commons.cli.Options;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -73,7 +74,7 @@ public class PravegaPerfTest {
     private static boolean isTransaction = false;
     private static int reportingInterval = 200;
     private static ExecutorService executor;
-    private static ExecutorService callbackExecutor;
+    private static CountDownLatch latch;
 
 
     public static void main(String[] args) throws Exception {
@@ -102,7 +103,6 @@ public class PravegaPerfTest {
 
         // Initialize executor
         executor = Executors.newFixedThreadPool(producerCount + 10);
-        callbackExecutor = Executors.newFixedThreadPool(producerCount + 10);
 
         try {
             @Cleanup
@@ -128,21 +128,25 @@ public class PravegaPerfTest {
             SensorReader reader = new SensorReader(producerCount * eventsPerSec * runtimeSec);
             executor.execute(reader);
         }
+        TemperatureSensors workers[] = new TemperatureSensors[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
+        latch = new CountDownLatch(producerCount);
         for (int i = 0; i < producerCount; i++) {
             //factory = new ClientFactoryImpl("Scope", new URI(controllerUri));
 
-            TemperatureSensors worker;
             if ( isTransaction ) {
-                worker = new TransactionTemperatureSensors(i, locations[i % locations.length], eventsPerSec, runtimeSec,
+                workers[i] = new TransactionTemperatureSensors(i, locations[i % locations.length], eventsPerSec,
+                        runtimeSec,
                         isTransaction, factory);
             } else {
-                worker = new TemperatureSensors(i, locations[i % locations.length], eventsPerSec, runtimeSec,
+                workers[i] = new TemperatureSensors(i, locations[i % locations.length], eventsPerSec, runtimeSec,
                         isTransaction, factory);
             }
-            executor.execute(worker);
+            executor.execute(workers[i]);
 
         }
+
+       latch.await();
 
         executor.shutdown();
         // Wait until all threads are finished.
@@ -289,7 +293,7 @@ public class PravegaPerfTest {
                                         payload);
                             },
                             now,
-                            payload.length(),callbackExecutor);
+                            payload.length(),executor);
                     //If it is a blocking call, wait for the ack
                     if ( blocking ) {
                         try {
@@ -327,6 +331,7 @@ public class PravegaPerfTest {
         @Override
         public void run() {
             runLoop(sendFunction());
+            latch.countDown();
         }
     }
 
@@ -375,7 +380,7 @@ public class PravegaPerfTest {
                     final EventRead<String> result = reader.readNextEvent(0);
                     produceStats.runAndRecordTime(() -> {
                     return null;
-                }, Long.parseLong(result.getEvent()), 100, callbackExecutor);
+                }, Long.parseLong(result.getEvent()), 100, executor);
 
             } while ( totalEvents-- > 0 );
             } catch (ReinitializationRequiredException e) {
