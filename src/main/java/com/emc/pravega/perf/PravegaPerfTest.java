@@ -18,6 +18,7 @@
 package com.emc.pravega.perf;
 
 import com.emc.pravega.ClientFactory;
+import com.emc.pravega.ReaderGroupManager;
 import com.emc.pravega.StreamManager;
 import com.emc.pravega.stream.AckFuture;
 import com.emc.pravega.stream.EventRead;
@@ -25,6 +26,7 @@ import com.emc.pravega.stream.EventStreamReader;
 import com.emc.pravega.stream.EventStreamWriter;
 import com.emc.pravega.stream.EventWriterConfig;
 import com.emc.pravega.stream.ReaderConfig;
+import com.emc.pravega.stream.ReaderGroupConfig;
 import com.emc.pravega.stream.ReinitializationRequiredException;
 import com.emc.pravega.stream.ScalingPolicy;
 import com.emc.pravega.stream.StreamConfiguration;
@@ -40,6 +42,7 @@ import org.apache.commons.cli.Options;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -79,21 +82,6 @@ public class PravegaPerfTest {
 
     public static void main(String[] args) throws Exception {
 
-        // Place names where wind farms are located
-        String[] locations = {"Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
-                "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas",
-                "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
-                "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York",
-                "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island",
-                "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
-                "West Virginia", "Wisconsin", "Wyoming", "Montgomery", "Juneau", "Phoenix", "Little Rock",
-                "Sacramento", "Denver", "Hartford", "Dover", "Tallahassee", "Atlanta", "Honolulu", "Boise",
-                "Springfield", "Indianapolis", "Des Moines", "Topeka", "Frankfort", "Baton Rouge", "Augusta",
-                "Annapolis", "Boston", "Lansing", "St. Paul", "Jackson", "Jefferson City", "Helena", "Lincoln",
-                "Carson City", "Concord", "Trenton", "Santa Fe", "Albany", "Raleigh", "Bismarck", "Columbus",
-                "Oklahoma City", "Salem", "Harrisburg", "Providence", "Columbia", "Pierre", "Nashville", "Austin",
-                "Salt Lake City", "Montpelier", "Richmond", "Olympia", "Charleston", "Madison", "Cheyenne"};
-
         parseCmdLine(args);
 
         System.out.println("\nTurbineHeatSensor is running "+ producerCount + " simulators each ingesting " +
@@ -121,11 +109,13 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
-        produceStats = new PerfStats(producerCount * eventsPerSec * runtimeSec, reportingInterval, messageSize);
+        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
+                messageSize);
 
         if ( !onlyWrite ) {
-            consumeStats = new PerfStats(producerCount * eventsPerSec * runtimeSec, reportingInterval, messageSize);
+            consumeStats = new PerfStats("Reading",producerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             SensorReader reader = new SensorReader(producerCount * eventsPerSec * runtimeSec);
+            reader.cleanupEvents();
             executor.execute(reader);
         }
         TemperatureSensors workers[] = new TemperatureSensors[producerCount];
@@ -135,11 +125,11 @@ public class PravegaPerfTest {
             //factory = new ClientFactoryImpl("Scope", new URI(controllerUri));
 
             if ( isTransaction ) {
-                workers[i] = new TransactionTemperatureSensors(i, locations[i % locations.length], eventsPerSec,
+                workers[i] = new TransactionTemperatureSensors(i, eventsPerSec,
                         runtimeSec,
                         isTransaction, factory);
             } else {
-                workers[i] = new TemperatureSensors(i, locations[i % locations.length], eventsPerSec, runtimeSec,
+                workers[i] = new TemperatureSensors(i, eventsPerSec, runtimeSec,
                         isTransaction, factory);
             }
             executor.execute(workers[i]);
@@ -243,15 +233,13 @@ public class PravegaPerfTest {
 
         final EventStreamWriter<String> producer;
         private final int producerId;
-        private final String city;
         private final int eventsPerSec;
         private final int secondsToRun;
         private final boolean isTransaction;
 
-        TemperatureSensors(int sensorId, String city, int eventsPerSec, int secondsToRun, boolean isTransaction,
+        TemperatureSensors(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction,
                            ClientFactory factory) {
             this.producerId = sensorId;
-            this.city = city;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
             this.isTransaction = isTransaction;
@@ -284,7 +272,7 @@ public class PravegaPerfTest {
                     currentEventsPerSec++;
 
                     // Construct event payload
-                    String val = System.currentTimeMillis() + ", " + producerId + ", " + city + ", " + (int) (Math.random() * 200);
+                    String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
                     String payload = String.format("%-" + messageSize + "s", val);
                     // event ingestion
                     long now = System.currentTimeMillis();
@@ -340,9 +328,9 @@ public class PravegaPerfTest {
 
         private final Transaction<String> transaction;
 
-        TransactionTemperatureSensors(int sensorId, String city, int eventsPerSec, int secondsToRun, boolean
+        TransactionTemperatureSensors(int sensorId, int eventsPerSec, int secondsToRun, boolean
                 isTransaction, ClientFactory factory) {
-            super(sensorId, city, eventsPerSec, secondsToRun, isTransaction, factory);
+            super(sensorId, eventsPerSec, secondsToRun, isTransaction, factory);
             transaction = producer.beginTxn(60000,60000,60000);
         }
 
@@ -365,27 +353,55 @@ public class PravegaPerfTest {
      */
     private static class SensorReader implements Runnable {
         private int totalEvents;
+        private EventStreamReader<String> reader;
 
         public SensorReader(int totalEvents) {
             this.totalEvents = totalEvents;
+            ClientFactory clientFactory = ClientFactory.withScope("Scope",
+                    URI.create(controllerUri));
+            ReaderGroupManager readerGroupManager = null;
+            try {
+                readerGroupManager = ReaderGroupManager.withScope("Scope", new URI(controllerUri));
+            } catch (URISyntaxException e1) {
+                e1.printStackTrace();
+            }
+            readerGroupManager.createReaderGroup("Reader", ReaderGroupConfig.builder().build(),
+                        Collections.singleton(streamName));
+            reader = clientFactory.createReader(
+                    "reader", "Reader", new JavaSerializer<String>(), ReaderConfig.builder().build());
         }
 
-        @Override
-        public void run() {
-            @Cleanup
-            EventStreamReader<String> reader = factory.createReader(streamName,
-                    new JavaSerializer<>(), ReaderConfig.builder().build(), null);
+        public void cleanupEvents() {
             try {
+                EventRead<String> result;
                 do {
-                    final EventRead<String> result = reader.readNextEvent(0);
-                    produceStats.runAndRecordTime(() -> {
-                    return null;
-                }, Long.parseLong(result.getEvent()), 100, executor);
-
-            } while ( totalEvents-- > 0 );
+                    result = reader.readNextEvent(600);
+                }while (result.getEvent()!= null);
             } catch (ReinitializationRequiredException e) {
                 e.printStackTrace();
             }
+
+        }
+        @Override
+        public void run() {
+                System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
+                EventRead<String> event = null;
+                try {
+                    do {
+                        final EventRead<String> result = reader.readNextEvent(600);
+                        if(result.getEvent() == null)
+                        {
+                            continue;
+                        }
+                        consumeStats.runAndRecordTime(() -> {
+                            return null;
+                        }, Long.parseLong(result.getEvent().split(",")[0]), 100, executor);
+
+                    } while (totalEvents-- > 0);
+                } catch (ReinitializationRequiredException e) {
+                    e.printStackTrace();
+                }
+                reader.close();
         }
     }
 

@@ -25,6 +25,7 @@ import java.util.function.Supplier;
 
 class PerfStats {
     private final int messageSize;
+    private final String action;
     private long windowStartTime;
     private long start;
     private long windowStart;
@@ -42,7 +43,8 @@ class PerfStats {
     private long windowBytes;
     private long reportingInterval;
 
-    public PerfStats(long numRecords, int reportingInterval, int messageSize) {
+    public PerfStats(String action, long numRecords, int reportingInterval, int messageSize) {
+        this.action = action;
         this.start = System.currentTimeMillis();
         this.windowStartTime = System.currentTimeMillis();
         this.windowStart = 0;
@@ -86,8 +88,8 @@ class PerfStats {
         long elapsed = System.currentTimeMillis() - windowStartTime;
         double recsPerSec = 1000.0 * windowCount / (double) elapsed;
         double mbPerSec = 1000.0 * this.windowBytes / (double) elapsed / (1024.0 * 1024.0);
-        System.out.printf("%d records sent, %.1f records/sec (%.5f MB/sec), %.1f ms avg latency, %.1f max latency.\n",
-                windowCount, recsPerSec, mbPerSec, windowTotalLatency / ((double) windowCount * 1000.0),
+        System.out.printf("%d records %s, %.1f records/sec (%.5f MB/sec), %.1f ms avg latency, %.1f max latency.\n",
+                windowCount, action, recsPerSec, mbPerSec, windowTotalLatency / ((double) windowCount * 1000.0),
                 (double) windowMaxLatency / 1000.0);
         System.out.printf(" WINDOW: %d, %d, %.1f ,%.5f MB/sec, %.1f, %.1f \n",
                 messageSize, windowCount, recsPerSec, mbPerSec, windowTotalLatency / ((double) windowCount * 1000.0),
@@ -123,7 +125,7 @@ class PerfStats {
                 count, recsPerSec, mbPerSec, totalLatency / ((double) count * 1000.0), (double) maxLatency / 1000.0,
                 percs[0] / 1000.0, percs[1] / 1000.0, percs[2] / 1000.0, percs[3] / 1000.0);
         System.out.printf(
-                " FINAL:, %d, %.5f MB/sec, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n",
+                " %s FINAL:, %d, %.5f MB/sec, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n", this.action,
                 messageSize, mbPerSec, totalLatency / ((double) count * 1000.0), (double) maxLatency / 1000.0,
                 percs[0] / 1000.0, percs[1] / 1000.0, percs[2] / 1000.0, percs[3] / 1000.0);
     }
@@ -142,9 +144,13 @@ class PerfStats {
     public AckFuture runAndRecordTime(Supplier<AckFuture> fn, long startTime, int length, Executor executor) {
         int iter = this.iteration++;
         AckFuture retVal = fn.get();
-        retVal.addListener(() -> {
+        if(retVal == null) {
             record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
-        },executor);
+        } else {
+            retVal.addListener(() -> {
+                record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
+            }, executor);
+        }
         return retVal;
 
     }
