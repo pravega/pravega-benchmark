@@ -34,6 +34,7 @@ import com.emc.pravega.stream.Transaction;
 import com.emc.pravega.stream.TxnFailedException;
 import com.emc.pravega.stream.impl.JavaSerializer;
 import lombok.Cleanup;
+import lombok.Setter;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -48,6 +49,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 
 
@@ -69,6 +71,7 @@ public class PravegaPerfTest {
     private static boolean blocking = false;
     // How many producers should we run concurrently
     private static int producerCount = 20;
+    private static int consumerCount = 20;
     // How many events each producer has to produce per seconds
     private static int eventsPerSec = 40;
     // How long it needs to run
@@ -84,13 +87,8 @@ public class PravegaPerfTest {
 
         parseCmdLine(args);
 
-        System.out.println("\nTurbineHeatSensor is running "+ producerCount + " simulators each ingesting " +
-                eventsPerSec + " temperature data per second for " + runtimeSec + " seconds " +
-                (isTransaction ? "via transactional mode" : " via non-transactional mode. The controller end point " +
-                        "is " + controllerUri));
-
         // Initialize executor
-        executor = Executors.newFixedThreadPool(producerCount + 10);
+        executor = Executors.newFixedThreadPool(producerCount + consumerCount + 10);
 
         try {
             @Cleanup
@@ -114,9 +112,12 @@ public class PravegaPerfTest {
 
         if ( !onlyWrite ) {
             consumeStats = new PerfStats("Reading",producerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
-            SensorReader reader = new SensorReader(producerCount * eventsPerSec * runtimeSec);
-            reader.cleanupEvents();
-            executor.execute(reader);
+            SensorReader.setTotalEvents(new AtomicInteger(producerCount * eventsPerSec * runtimeSec));
+            for(int i=0;i<consumerCount;i++) {
+                SensorReader reader = new SensorReader(i);
+                reader.cleanupEvents();
+                executor.execute(reader);
+            }
         }
         TemperatureSensors workers[] = new TemperatureSensors[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
@@ -157,6 +158,7 @@ public class PravegaPerfTest {
 
         options.addOption("controller", true, "controller URI");
         options.addOption("producers", true, "number of producers");
+        options.addOption("consumers", true, "number of consumers");
         options.addOption("eventspersec", true, "number events per sec");
         options.addOption("runtime", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
@@ -185,6 +187,10 @@ public class PravegaPerfTest {
 
                 if (commandline.hasOption("producers")) {
                     producerCount = Integer.parseInt(commandline.getOptionValue("producers"));
+                }
+
+                if (commandline.hasOption("consumers")) {
+                    consumerCount = Integer.parseInt(commandline.getOptionValue("consumers"));
                 }
 
                 if (commandline.hasOption("eventspersec")) {
@@ -352,11 +358,14 @@ public class PravegaPerfTest {
      * A Sensor reader class that reads the temperative data
      */
     private static class SensorReader implements Runnable {
-        private int totalEvents;
+       @Setter
+        public static AtomicInteger totalEvents;
         private EventStreamReader<String> reader;
+        String readerId;
 
-        public SensorReader(int totalEvents) {
-            this.totalEvents = totalEvents;
+
+        public SensorReader(int readerId) {
+            this.readerId = Integer.toString(readerId);
             ClientFactory clientFactory = ClientFactory.withScope("Scope",
                     URI.create(controllerUri));
             ReaderGroupManager readerGroupManager = null;
@@ -365,10 +374,10 @@ public class PravegaPerfTest {
             } catch (URISyntaxException e1) {
                 e1.printStackTrace();
             }
-            readerGroupManager.createReaderGroup("Reader", ReaderGroupConfig.builder().build(),
+            readerGroupManager.createReaderGroup( streamName, ReaderGroupConfig.builder().build(),
                         Collections.singleton(streamName));
             reader = clientFactory.createReader(
-                    "reader", "Reader", new JavaSerializer<String>(), ReaderConfig.builder().build());
+                    this.readerId, streamName, new JavaSerializer<String>(), ReaderConfig.builder().build());
         }
 
         public void cleanupEvents() {
@@ -387,8 +396,8 @@ public class PravegaPerfTest {
                 System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
                 EventRead<String> event = null;
                 try {
-                    do {
-                        final EventRead<String> result = reader.readNextEvent(600);
+                    while (totalEvents.decrementAndGet() >= 0) {
+                        final EventRead<String> result = reader.readNextEvent(60000);
                         if(result.getEvent() == null)
                         {
                             continue;
@@ -397,7 +406,7 @@ public class PravegaPerfTest {
                             return null;
                         }, Long.parseLong(result.getEvent().split(",")[0]), 100, executor);
 
-                    } while (totalEvents-- > 0);
+                    }
                 } catch (ReinitializationRequiredException e) {
                     e.printStackTrace();
                 }
