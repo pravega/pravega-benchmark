@@ -37,10 +37,10 @@ echo "create the zk root"
 
 echo "format the bookie"
 # format bookie
-BOOKIE_CONF=/opt/bk_all/bookkeeper-server-4.4.0/conf/bk_server.conf /opt/bk_all/bookkeeper-server-4.4.0/bin/bookkeeper shell metaformat -nonInteractive
+BOOKIE_CONF=${PWD}/bookkeeper-server-4.4.0/conf/bk_server.conf ./bookkeeper-server-4.4.0/bin/bookkeeper shell metaformat -nonInteractive
 
 echo "start a new bookie"
 # start bookie,
-nohup SERVICE_PORT=$PORT0 /opt/bk_all/bookkeeper-server-4.4.0//bin/bookkeeper bookie --conf  /opt/bk_all/bookkeeper-server-4.4.0/conf/bk_server.conf 0<&- &> /tmp/nohup.log &
+SERVICE_PORT=$PORT0 nohup ${PWD}/bookkeeper-server-4.4.0//bin/bookkeeper bookie --conf  ${PWD}/bookkeeper-server-4.4.0/conf/bk_server.conf 0<&- &> /tmp/nohup.log &
 sleep 5
 
