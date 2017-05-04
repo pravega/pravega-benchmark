@@ -116,6 +116,7 @@ public class PravegaPerfTest {
             SensorReader.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
             for(int i=0;i<consumerCount;i++) {
                 SensorReader reader = new SensorReader(i);
+                reader.cleanupEvents();
                 executor.execute(reader);
             }
         }
@@ -403,7 +404,6 @@ public class PravegaPerfTest {
         }
         @Override
         public void run() {
-                cleanupEvents();
                 System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
                 EventRead<String> event = null;
                 try {
