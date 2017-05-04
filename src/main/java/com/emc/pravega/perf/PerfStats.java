@@ -25,8 +25,8 @@ import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 class PerfStats {
-    private final int messageSize;
-    private final String action;
+    private int messageSize;
+    private String action;
     private long windowStartTime;
     private long start;
     private long windowStart;
@@ -45,24 +45,26 @@ class PerfStats {
     private long reportingInterval;
 
     public PerfStats(String action, long numRecords, int reportingInterval, int messageSize) {
-        this.action = action;
-        this.start = System.currentTimeMillis();
-        this.windowStartTime = System.currentTimeMillis();
-        this.windowStart = 0;
-        this.index = 0;
-        this.iteration = 0;
-        this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
-        this.latencies = new long[(int) (numRecords / this.sampling)];
-        this.index = 0;
-        this.maxLatency = 0;
-        this.totalLatency = 0;
-        this.windowCount = 0;
-        this.windowMaxLatency = 0;
-        this.windowTotalLatency = 0;
-        this.windowBytes = 0;
-        this.totalLatency = 0;
-        this.reportingInterval = reportingInterval;
-        this.messageSize = messageSize;
+        if ( numRecords != 0 ) {
+            this.action = action;
+            this.start = System.currentTimeMillis();
+            this.windowStartTime = System.currentTimeMillis();
+            this.windowStart = 0;
+            this.index = 0;
+            this.iteration = 0;
+            this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
+            this.latencies = new long[(int) (numRecords / this.sampling)];
+            this.index = 0;
+            this.maxLatency = 0;
+            this.totalLatency = 0;
+            this.windowCount = 0;
+            this.windowMaxLatency = 0;
+            this.windowTotalLatency = 0;
+            this.windowBytes = 0;
+            this.totalLatency = 0;
+            this.reportingInterval = reportingInterval;
+            this.messageSize = messageSize;
+        }
     }
 
     public synchronized void record(int iter, int latencyMicro, int bytes, long time) {

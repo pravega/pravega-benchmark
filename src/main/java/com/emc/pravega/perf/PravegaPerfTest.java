@@ -110,8 +110,8 @@ public class PravegaPerfTest {
                 messageSize);
 
         if ( !onlyWrite ) {
-            consumeStats = new PerfStats("Reading",producerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
-            SensorReader.setTotalEvents(new AtomicInteger(producerCount * eventsPerSec * runtimeSec));
+            consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
+            SensorReader.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
             for(int i=0;i<consumerCount;i++) {
                 SensorReader reader = new SensorReader(i);
                 reader.cleanupEvents();
@@ -143,8 +143,10 @@ public class PravegaPerfTest {
         executor.awaitTermination(1, TimeUnit.HOURS);
 
         System.out.println("\nFinished all producers");
-        produceStats.printAll();
-        produceStats.printTotal();
+        if(producerCount != 0) {
+            produceStats.printAll();
+            produceStats.printTotal();
+        }
         if ( !onlyWrite ) {
             consumeStats.printTotal();
         }
@@ -395,17 +397,19 @@ public class PravegaPerfTest {
                 System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
                 EventRead<String> event = null;
                 try {
-                    while (totalEvents.decrementAndGet() >= 0) {
+                    int counter = 0;
+                    do {
                         final EventRead<String> result = reader.readNextEvent(60000);
                         if(result.getEvent() == null)
                         {
                             continue;
                         }
-                        consumeStats.runAndRecordTime(() -> {
+                        counter = totalEvents.decrementAndGet();
+                         consumeStats.runAndRecordTime(() -> {
                             return null;
                         }, Long.parseLong(result.getEvent().split(",")[0]), 100, executor);
 
-                    }
+                    }while (counter > 0);
                 } catch (ReinitializationRequiredException e) {
                     e.printStackTrace();
                 }
