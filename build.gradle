@@ -17,7 +17,7 @@ buildscript {
 
     dependencies {
 
-        compile "io.pravega:pravega-clients:0.1.0-SNAPSHOT",
+        compile "io.pravega:pravega-client:0.1.0-SNAPSHOT",
                 "io.pravega:pravega-common:0.1.0-SNAPSHOT",
                 "commons-cli:commons-cli:1.3.1"
 

@@ -18,7 +18,8 @@
 package com.emc.pravega.perf;
 
 
-import io.pravega.stream.AckFuture;
+
+import io.pravega.client.stream.AckFuture;
 
 import java.util.Arrays;
 import java.util.concurrent.Executor;
