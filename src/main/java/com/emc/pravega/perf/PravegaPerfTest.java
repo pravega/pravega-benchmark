@@ -62,7 +62,7 @@ import java.util.function.BiFunction;
  */
 public class PravegaPerfTest {
 
-    private static PerfStats produceStats, consumeStats;
+    private static PerfStats produceStats, consumeStats, drainStats;
     private static String controllerUri = "http://10.249.250.154:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
@@ -111,10 +111,11 @@ public class PravegaPerfTest {
 
         if ( !onlyWrite ) {
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
+            drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
+                    messageSize);
             SensorReader.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
             for(int i=0;i<consumerCount;i++) {
                 SensorReader reader = new SensorReader(i);
-                reader.cleanupEvents();
                 executor.execute(reader);
             }
         }
@@ -384,9 +385,17 @@ public class PravegaPerfTest {
         public void cleanupEvents() {
             try {
                 EventRead<String> result;
+                System.out.format("******** Draining events from %s/%s%n", "Scope", streamName);
                 do {
+                    long startTime = System.currentTimeMillis();
                     result = reader.readNextEvent(600);
-                }while (result.getEvent()!= null);
+                    if(result.getEvent()!=null) {
+                        drainStats.runAndRecordTime(() -> {
+                            return null;
+                        }, startTime, result.getEvent().length(), executor);
+                    } else break;
+                }while (true);
+                drainStats.printTotal();
             } catch (ReinitializationRequiredException e) {
                 e.printStackTrace();
             }
@@ -394,6 +403,7 @@ public class PravegaPerfTest {
         }
         @Override
         public void run() {
+                cleanupEvents();
                 System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
                 EventRead<String> event = null;
                 try {
@@ -407,7 +417,7 @@ public class PravegaPerfTest {
                         counter = totalEvents.decrementAndGet();
                          consumeStats.runAndRecordTime(() -> {
                             return null;
-                        }, Long.parseLong(result.getEvent().split(",")[0]), 100, executor);
+                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length(), executor);
 
                     }while (counter > 0);
                 } catch (ReinitializationRequiredException e) {
