@@ -26,6 +26,7 @@ import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.ReaderConfig;
+import io.pravega.client.stream.ReaderGroup;
 import io.pravega.client.stream.ReaderGroupConfig;
 import io.pravega.client.stream.ReinitializationRequiredException;
 import io.pravega.client.stream.ScalingPolicy;
@@ -48,6 +49,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
@@ -79,7 +81,7 @@ public class PravegaPerfTest {
     // Should producers use Transaction or not
     private static boolean isTransaction = false;
     private static int reportingInterval = 200;
-    private static ExecutorService executor;
+    private static ScheduledExecutorService executor;
     private static CountDownLatch latch;
 
 
@@ -88,7 +90,7 @@ public class PravegaPerfTest {
         parseCmdLine(args);
 
         // Initialize executor
-        executor = Executors.newFixedThreadPool(producerCount + consumerCount + 10);
+        executor = Executors.newScheduledThreadPool(producerCount + consumerCount + 10);
 
         try {
             @Cleanup StreamManager streamManager = null;
@@ -377,10 +379,11 @@ public class PravegaPerfTest {
             } catch (URISyntaxException e1) {
                 e1.printStackTrace();
             }
-            readerGroupManager.createReaderGroup( streamName, ReaderGroupConfig.builder().build(),
-                        Collections.singleton(streamName));
+            ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
+                    ReaderGroupConfig.builder().build(), Collections.singleton(streamName));
             reader = clientFactory.createReader(
                     this.readerId, streamName, new JavaSerializer<String>(), ReaderConfig.builder().build());
+            readerGroup.initiateCheckpoint(this.readerId, executor);
         }
 
         public void cleanupEvents() {
