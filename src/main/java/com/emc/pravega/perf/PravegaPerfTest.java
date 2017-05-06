@@ -129,6 +129,7 @@ public class PravegaPerfTest {
                     reader.cleanupEvents();
                 executor.execute(reader);
             }
+            if(consumerCount == 0)
             readerGroup.initiateCheckpoint(streamName, executor);
         }
         produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
