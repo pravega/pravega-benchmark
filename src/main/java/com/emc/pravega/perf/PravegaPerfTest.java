@@ -165,7 +165,7 @@ public class PravegaPerfTest {
         executor.awaitTermination(1, TimeUnit.HOURS);
 
 
-        if ( !onlyWrite ) {
+        if ( !onlyWrite && consumerCount != 0 ) {
             consumeStats.printTotal();
         }
         System.exit(0);
