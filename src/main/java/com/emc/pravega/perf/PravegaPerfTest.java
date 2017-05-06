@@ -108,20 +108,31 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
-        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
-                messageSize);
+
 
         if ( !onlyWrite ) {
+            ReaderGroupManager readerGroupManager = null;
+            try {
+                readerGroupManager = ReaderGroupManager.withScope("Scope", new URI(controllerUri));
+            } catch (URISyntaxException e1) {
+                e1.printStackTrace();
+            }
+            ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
+                    ReaderGroupConfig.builder().build(), Collections.singleton(streamName));
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
                     messageSize);
             SensorReader.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
             for(int i=0;i<consumerCount;i++) {
                 SensorReader reader = new SensorReader(i);
-                reader.cleanupEvents();
+                if(i == 0)
+                    reader.cleanupEvents();
                 executor.execute(reader);
             }
+            readerGroup.initiateCheckpoint("CP1", executor);
         }
+        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
+                messageSize);
         TemperatureSensors workers[] = new TemperatureSensors[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
         latch = new CountDownLatch(producerCount);
@@ -373,17 +384,9 @@ public class PravegaPerfTest {
             this.readerId = Integer.toString(readerId);
             ClientFactory clientFactory = ClientFactory.withScope("Scope",
                     URI.create(controllerUri));
-            ReaderGroupManager readerGroupManager = null;
-            try {
-                readerGroupManager = ReaderGroupManager.withScope("Scope", new URI(controllerUri));
-            } catch (URISyntaxException e1) {
-                e1.printStackTrace();
-            }
-            ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
-                    ReaderGroupConfig.builder().build(), Collections.singleton(streamName));
+
             reader = clientFactory.createReader(
                     this.readerId, streamName, new JavaSerializer<String>(), ReaderConfig.builder().build());
-            readerGroup.initiateCheckpoint(this.readerId, executor);
         }
 
         public void cleanupEvents() {
