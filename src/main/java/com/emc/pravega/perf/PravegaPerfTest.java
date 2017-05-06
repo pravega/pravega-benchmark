@@ -153,15 +153,17 @@ public class PravegaPerfTest {
 
        latch.await();
 
-        executor.shutdown();
-        // Wait until all threads are finished.
-        executor.awaitTermination(1, TimeUnit.HOURS);
-
         System.out.println("\nFinished all producers");
         if(producerCount != 0) {
             produceStats.printAll();
             produceStats.printTotal();
         }
+
+        executor.shutdown();
+        // Wait until all threads are finished.
+        executor.awaitTermination(1, TimeUnit.HOURS);
+
+
         if ( !onlyWrite ) {
             consumeStats.printTotal();
         }
