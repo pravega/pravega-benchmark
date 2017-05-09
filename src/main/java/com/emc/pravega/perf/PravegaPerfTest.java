@@ -47,7 +47,6 @@ import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -58,7 +57,7 @@ import java.util.function.BiFunction;
 
 
 /**
- * Sample app will simulate sensors that measure temperatures of Wind Turbines Gearbox.
+ * Performance benchmark for Pravega.
  * Data format is in comma separated format as following: {TimeStamp, Sensor Id, Location, TempValue }.
  *
  */
@@ -122,9 +121,9 @@ public class PravegaPerfTest {
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
                     messageSize);
-            SensorReader.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
+            ReaderWorker.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
             for(int i=0;i<consumerCount;i++) {
-                SensorReader reader = new SensorReader(i);
+                ReaderWorker reader = new ReaderWorker(i);
                 if(i == 0)
                     reader.cleanupEvents();
                 executor.execute(reader);
@@ -134,18 +133,18 @@ public class PravegaPerfTest {
         }
         produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
                 messageSize);
-        TemperatureSensors workers[] = new TemperatureSensors[producerCount];
+        WriterWorker workers[] = new WriterWorker[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
         latch = new CountDownLatch(producerCount);
         for (int i = 0; i < producerCount; i++) {
             //factory = new ClientFactoryImpl("Scope", new URI(controllerUri));
 
             if ( isTransaction ) {
-                workers[i] = new TransactionTemperatureSensors(i, eventsPerSec,
+                workers[i] = new TransactionWriterWorker(i, eventsPerSec,
                         runtimeSec,
                         isTransaction, factory);
             } else {
-                workers[i] = new TemperatureSensors(i, eventsPerSec, runtimeSec,
+                workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
                         isTransaction, factory);
             }
             executor.execute(workers[i]);
@@ -254,7 +253,7 @@ public class PravegaPerfTest {
      * A Sensor simulator class that generates dummy value as temperature measurement and ingests to specified stream.
      */
 
-    private static class TemperatureSensors implements Runnable {
+    private static class WriterWorker implements Runnable {
 
         final EventStreamWriter<String> producer;
         private final int producerId;
@@ -262,8 +261,8 @@ public class PravegaPerfTest {
         private final int secondsToRun;
         private final boolean isTransaction;
 
-        TemperatureSensors(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction,
-                           ClientFactory factory) {
+        WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction,
+                     ClientFactory factory) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
@@ -349,11 +348,11 @@ public class PravegaPerfTest {
     }
 
 
-    private static class TransactionTemperatureSensors extends TemperatureSensors {
+    private static class TransactionWriterWorker extends WriterWorker {
 
         private final Transaction<String> transaction;
 
-        TransactionTemperatureSensors(int sensorId, int eventsPerSec, int secondsToRun, boolean
+        TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
                 isTransaction, ClientFactory factory) {
             super(sensorId, eventsPerSec, secondsToRun, isTransaction, factory);
             transaction = producer.beginTxn(60000,60000,60000);
@@ -376,14 +375,14 @@ public class PravegaPerfTest {
     /**
      * A Sensor reader class that reads the temperative data
      */
-    private static class SensorReader implements Runnable {
+    private static class ReaderWorker implements Runnable {
        @Setter
         public static AtomicInteger totalEvents;
         private EventStreamReader<String> reader;
         String readerId;
 
 
-        public SensorReader(int readerId) {
+        public ReaderWorker(int readerId) {
             this.readerId = Integer.toString(readerId);
             ClientFactory clientFactory = ClientFactory.withScope("Scope",
                     URI.create(controllerUri));
