@@ -19,9 +19,9 @@ package com.emc.pravega.perf;
 
 
 
-import io.pravega.client.stream.AckFuture;
 
 import java.util.Arrays;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
@@ -145,15 +145,15 @@ class PerfStats {
         return values;
     }
 
-    public AckFuture runAndRecordTime(Supplier<AckFuture> fn, long startTime, int length, Executor executor) {
+    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length, Executor executor) {
         int iter = this.iteration++;
-        AckFuture retVal = fn.get();
+        CompletableFuture  retVal = fn.get();
         if(retVal == null) {
             record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
         } else {
-            retVal.addListener(() -> {
+            retVal = retVal.thenAccept((d) -> {
                 record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
-            }, executor);
+            });
         }
         return retVal;
 

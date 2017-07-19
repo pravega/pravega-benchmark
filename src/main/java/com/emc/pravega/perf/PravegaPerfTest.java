@@ -20,7 +20,6 @@ package com.emc.pravega.perf;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.admin.ReaderGroupManager;
 import io.pravega.client.admin.StreamManager;
-import io.pravega.client.stream.AckFuture;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.stream.EventStreamWriter;
@@ -34,6 +33,7 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
+import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
 import lombok.Setter;
 import org.apache.commons.cli.BasicParser;
@@ -277,7 +277,7 @@ public class PravegaPerfTest {
          * This function will be executed in a loop and time behavior is measured.
          * @return A function which takes String key and data and returns a future object.
          */
-        BiFunction<String, String, AckFuture> sendFunction() {
+        BiFunction<String, String, CompletableFuture> sendFunction() {
             return  ( key, data) -> producer.writeEvent(key, data);
         }
 
@@ -285,9 +285,9 @@ public class PravegaPerfTest {
          * Executes the given method over the producer with configured settings.
          * @param fn The function to execute.
          */
-        void runLoop(BiFunction<String, String, AckFuture> fn) {
+        void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
-            AckFuture retFuture = null;
+            CompletableFuture retFuture = null;
             for (int i = 0; i < secondsToRun; i++) {
                 int currentEventsPerSec = 0;
 
@@ -358,7 +358,7 @@ public class PravegaPerfTest {
             transaction = producer.beginTxn(60000,60000,60000);
         }
 
-        BiFunction<String, String, AckFuture> sendFunction() {
+        BiFunction<String, String, CompletableFuture> sendFunction() {
             return  ( key, data) -> {
                 try {
                     transaction.writeEvent(key, data);
