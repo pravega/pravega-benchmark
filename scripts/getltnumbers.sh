@@ -8,7 +8,7 @@ controller_ip=$1
 	do 
 		packets=$(( $j/$i))
 		echo "packetsize $i packets $packets"
-		pravega-benchmark/bin/pravega-benchmark http://$controller_ip:9090 -producers 1 -eventspersec $packets -runtime 1 -size $i -stream ww -blocking false -reporting 200 | tee   {$j}_thoroughput_{$i}_eventsize.txt
+		pravega-benchmark/bin/pravega-benchmark http://$controller_ip:9090 -runtime 1 -eventspersec $packets -size $i -stream stream401 -producers 1  -blocking false -reporting 200 | tee   {$j}_thoroughput_{$i}_eventsize.txt
 	 done
  done
 
