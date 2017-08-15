@@ -33,6 +33,7 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
 import lombok.Setter;
@@ -301,7 +302,7 @@ public class PravegaPerfTest {
                     // event ingestion
                     long now = System.currentTimeMillis();
                     retFuture = produceStats.runAndRecordTime(() -> {
-                                return  fn.apply(Integer.toString(producerId),
+                                return  fn.apply((Integer.toString(producerId + new Random().nextInt())),
                                         payload);
                             },
                             now,
