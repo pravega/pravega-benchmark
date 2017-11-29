@@ -83,7 +83,7 @@ public class PravegaPerfTest {
     private static int reportingInterval = 200;
     private static ScheduledExecutorService executor;
     private static CountDownLatch latch;
-
+    private static boolean runKafka = false;
 
     public static void main(String[] args) throws Exception {
 
@@ -243,6 +243,10 @@ public class PravegaPerfTest {
                     reportingInterval = Integer.parseInt(commandline.getOptionValue("reporting"));
                 }
 
+                if (commandline.hasOption("kafka")) {
+                    runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+                }
+
             }
         } catch (Exception nfe) {
             System.out.println("Invalid arguments. Starting with default values");
@@ -356,7 +360,7 @@ public class PravegaPerfTest {
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
                 isTransaction, ClientFactory factory) {
             super(sensorId, eventsPerSec, secondsToRun, isTransaction, factory);
-            transaction = producer.beginTxn(60000,60000,60000);
+            transaction = producer.beginTxn();
         }
 
         BiFunction<String, String, CompletableFuture> sendFunction() {
