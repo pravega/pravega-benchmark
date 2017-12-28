@@ -362,8 +362,10 @@ public class PravegaPerfTest {
                     System.exit(1);
                 }
             }
-            producer.flush();
-            //producer.close();
+            if (producer != null) {
+                producer.flush();
+                //producer.close();
+            }
             try {
                 //Wait for the last packet to get acked
                 retFuture.get();
