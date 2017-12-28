@@ -33,19 +33,12 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
-import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import lombok.Cleanup;
-import lombok.Setter;
-import org.apache.commons.cli.BasicParser;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Options;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collections;
+import java.util.Properties;
+import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -53,9 +46,18 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
-
-
-
+import lombok.Cleanup;
+import lombok.Setter;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
 
 /**
  * Performance benchmark for Pravega.
@@ -84,6 +86,7 @@ public class PravegaPerfTest {
     private static ScheduledExecutorService executor;
     private static CountDownLatch latch;
     private static boolean runKafka = false;
+    private static Properties producerProps = null;
 
     public static void main(String[] args) throws Exception {
 
@@ -92,6 +95,7 @@ public class PravegaPerfTest {
         // Initialize executor
         executor = Executors.newScheduledThreadPool(producerCount + consumerCount + 10);
 
+        if (!runKafka) {
         try {
             @Cleanup StreamManager streamManager = null;
             streamManager = StreamManager.create(new URI(controllerUri));
@@ -99,8 +103,8 @@ public class PravegaPerfTest {
 
             streamManager.createStream("Scope", streamName,
                     StreamConfiguration.builder().scope("Scope").streamName(streamName)
-                            .scalingPolicy(ScalingPolicy.fixed(producerCount))
-                            .build());
+                                       .scalingPolicy(ScalingPolicy.fixed(producerCount))
+                                       .build());
 
             factory = ClientFactory.withScope("Scope", new URI(controllerUri));
         } catch (URISyntaxException e) {
@@ -108,9 +112,7 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
-
-
-        if ( !onlyWrite ) {
+        if (!onlyWrite) {
             ReaderGroupManager readerGroupManager = null;
             try {
                 readerGroupManager = ReaderGroupManager.withScope("Scope", new URI(controllerUri));
@@ -119,19 +121,20 @@ public class PravegaPerfTest {
             }
             ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
                     ReaderGroupConfig.builder().build(), Collections.singleton(streamName));
-            consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
+            consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval, messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
                     messageSize);
             ReaderWorker.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
-            for(int i=0;i<consumerCount;i++) {
+            for (int i = 0; i < consumerCount; i++) {
                 ReaderWorker reader = new ReaderWorker(i);
-                if(i == 0)
+                if (i == 0)
                     reader.cleanupEvents();
                 executor.execute(reader);
             }
-            if(consumerCount == 0)
-            readerGroup.initiateCheckpoint(streamName, executor);
+            if (consumerCount == 0)
+                readerGroup.initiateCheckpoint(streamName, executor);
         }
+    }
         produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
                 messageSize);
         WriterWorker workers[] = new WriterWorker[producerCount];
@@ -140,13 +143,18 @@ public class PravegaPerfTest {
         for (int i = 0; i < producerCount; i++) {
             //factory = new ClientFactoryImpl("Scope", new URI(controllerUri));
 
-            if ( isTransaction ) {
-                workers[i] = new TransactionWriterWorker(i, eventsPerSec,
-                        runtimeSec,
-                        isTransaction, factory);
-            } else {
-                workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, factory);
+                if (isTransaction) {
+                    workers[i] = new TransactionWriterWorker(i, eventsPerSec,
+                            runtimeSec,
+                            isTransaction, factory);
+                } else {
+                    if (!runKafka) {
+                    workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
+                            isTransaction, factory);
+                } else {
+                        workers[i] = new KafkaWriteWorker(i, eventsPerSec, runtimeSec,
+                                isTransaction);
+                    }
             }
             executor.execute(workers[i]);
 
@@ -186,6 +194,15 @@ public class PravegaPerfTest {
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval");
+        options.addOption("kafka", true, "enable Kafka tests instead of Pravega");
+
+        Option option  = OptionBuilder.withArgName( "property=value" )
+                                        .hasArgs(5)
+                                        .withValueSeparator()
+                                        .withDescription( "Kafka producer arguments arguments" )
+                                        .create( "producerConfig" );
+
+        options.addOption(option);
 
         options.addOption("help", false, "Help message");
 
@@ -244,8 +261,15 @@ public class PravegaPerfTest {
                 }
 
                 if (commandline.hasOption("kafka")) {
-                    runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+                    runKafka = true;
+                    Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+                    producerProps = commandline.getOptionProperties("producerConfig");
+                    if (!producerProps.contains(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG)) {
+                        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
+                        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
+                    }
                 }
+
 
             }
         } catch (Exception nfe) {
@@ -272,10 +296,13 @@ public class PravegaPerfTest {
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
             this.isTransaction = isTransaction;
-            this.producer = factory.createEventWriter(streamName,
-                    new JavaSerializer<String>(),
-                    EventWriterConfig.builder().build());
-
+            if (factory != null) {
+                this.producer = factory.createEventWriter(streamName,
+                        new JavaSerializer<String>(),
+                        EventWriterConfig.builder().build());
+            } else {
+                producer = null;
+            }
         }
 
         /**
@@ -445,5 +472,31 @@ public class PravegaPerfTest {
         static final int PORT = 9090;
         static final String SCOPE = "Scope";
         static final String STREAM_NAME = "aaj";
+    }
+
+    private static class KafkaWriteWorker extends WriterWorker {
+        private final KafkaProducer<byte[], byte[]> kProducer;
+
+        public KafkaWriteWorker(int i, int eventsPerSec, int runtimeSec, boolean isTransaction) {
+            super(i, eventsPerSec, runtimeSec, isTransaction, null);
+
+            kProducer = new KafkaProducer<>(producerProps);
+        }
+
+        @Override
+        BiFunction<String, String, CompletableFuture> sendFunction() {
+            return (String key, String data) -> {
+                CompletableFuture<Void> retFuture = new CompletableFuture();
+                ProducerRecord<byte[], byte[]> record = new ProducerRecord<>(streamName, key.getBytes(), data.getBytes());
+                kProducer.send(record, (metadata, exception) -> {
+                    if (exception == null) {
+                        retFuture.complete(null);
+                    } else {
+                        retFuture.completeExceptionally(exception);
+                    }
+                });
+            return retFuture;
+            };
+        }
     }
 }
