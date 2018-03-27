@@ -65,7 +65,7 @@ import java.util.function.BiFunction;
 public class PravegaPerfTest {
 
     private static PerfStats produceStats, consumeStats, drainStats;
-    private static String controllerUri = "http://10.249.250.154:9090";
+    private static String controllerUri = "tcp://localhost:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
     private static ClientFactory factory = null;
@@ -118,7 +118,7 @@ public class PravegaPerfTest {
                 e1.printStackTrace();
             }
             ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
-                    ReaderGroupConfig.builder().build(), Collections.singleton(streamName));
+                    ReaderGroupConfig.builder().build());
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
                     messageSize);
