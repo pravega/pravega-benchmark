@@ -45,7 +45,6 @@ import org.apache.commons.cli.Options;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -84,6 +83,7 @@ public class PravegaPerfTest {
     private static ScheduledExecutorService executor;
     private static CountDownLatch latch;
     private static boolean runKafka = false;
+    private static boolean isRandomKey = false;
 
     public static void main(String[] args) throws Exception {
 
@@ -117,8 +117,9 @@ public class PravegaPerfTest {
             } catch (URISyntaxException e1) {
                 e1.printStackTrace();
             }
-            ReaderGroup readerGroup = readerGroupManager.createReaderGroup(streamName,
+            readerGroupManager.createReaderGroup(streamName,
                     ReaderGroupConfig.builder().build());
+            ReaderGroup readerGroup = readerGroupManager.getReaderGroup(streamName);
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
                     messageSize);
@@ -143,10 +144,10 @@ public class PravegaPerfTest {
             if ( isTransaction ) {
                 workers[i] = new TransactionWriterWorker(i, eventsPerSec,
                         runtimeSec,
-                        isTransaction, factory);
+                        isTransaction, isRandomKey, factory);
             } else {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, factory);
+                        isTransaction, isRandomKey, factory);
             }
             executor.execute(workers[i]);
 
@@ -186,6 +187,7 @@ public class PravegaPerfTest {
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval");
+        options.addOption("randomkey", true, "Random key");
 
         options.addOption("help", false, "Help message");
 
@@ -243,6 +245,10 @@ public class PravegaPerfTest {
                     reportingInterval = Integer.parseInt(commandline.getOptionValue("reporting"));
                 }
 
+                if (commandline.hasOption("randomkey")) {
+                    onlyWrite = Boolean.parseBoolean(commandline.getOptionValue("randomkey"));
+                }
+
                 if (commandline.hasOption("kafka")) {
                     runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
                 }
@@ -266,7 +272,7 @@ public class PravegaPerfTest {
         private final int secondsToRun;
         private final boolean isTransaction;
 
-        WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction,
+        WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction, boolean isRandomKey,
                      ClientFactory factory) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
@@ -306,11 +312,16 @@ public class PravegaPerfTest {
                     // event ingestion
                     long now = System.currentTimeMillis();
                     retFuture = produceStats.runAndRecordTime(() -> {
-                                return  fn.apply((Integer.toString(producerId + new Random().nextInt())),
-                                        payload);
+                                String key;
+                                if (isRandomKey) {
+                                    key = Integer.toString(producerId + new Random().nextInt());
+                                } else {
+                                    key = Integer.toString(producerId);
+                                }
+                                return fn.apply(key, payload);
                             },
                             now,
-                            payload.length(),executor);
+                            payload.length(), executor);
                     //If it is a blocking call, wait for the ack
                     if ( blocking ) {
                         try {
@@ -358,8 +369,8 @@ public class PravegaPerfTest {
         private final Transaction<String> transaction;
 
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, ClientFactory factory) {
-            super(sensorId, eventsPerSec, secondsToRun, isTransaction, factory);
+                isTransaction, boolean isRandomKey, ClientFactory factory) {
+            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, factory);
             transaction = producer.beginTxn();
         }
 
