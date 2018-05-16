@@ -187,7 +187,7 @@ public class PravegaPerfTest {
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval");
-        options.addOption("randomkey", true, "Random key");
+        options.addOption("randomkey", true, "Set Random key default is one key per producer");
 
         options.addOption("help", false, "Help message");
 
