@@ -246,7 +246,7 @@ public class PravegaPerfTest {
                 }
 
                 if (commandline.hasOption("randomkey")) {
-                    onlyWrite = Boolean.parseBoolean(commandline.getOptionValue("randomkey"));
+                    isRandomKey = Boolean.parseBoolean(commandline.getOptionValue("randomkey"));
                 }
 
                 if (commandline.hasOption("kafka")) {
