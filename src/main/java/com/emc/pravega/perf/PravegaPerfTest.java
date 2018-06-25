@@ -189,6 +189,7 @@ public class PravegaPerfTest {
         options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
+        options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
 
         options.addOption("help", false, "Help message");
 
@@ -371,7 +372,7 @@ public class PravegaPerfTest {
 
     private static class TransactionWriterWorker extends WriterWorker {
 
-        private final Transaction<String> transaction;
+        private Transaction<String> transaction;
         private final int transactionsPerCommit;
         private int eventCount = 0;
 
@@ -390,6 +391,7 @@ public class PravegaPerfTest {
                     if (eventCount >= transactionsPerCommit) {
                         eventCount = 0;
                         transaction.commit();
+                        transaction = producer.beginTxn();
                     }
                 } catch (TxnFailedException e) {
                     System.out.println("Publish to transaction failed");
