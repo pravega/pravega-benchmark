@@ -119,7 +119,7 @@ public class PravegaPerfTest {
                 e1.printStackTrace();
             }
             readerGroupManager.createReaderGroup(streamName,
-                    ReaderGroupConfig.builder().build());
+                    ReaderGroupConfig.builder().stream("Scope/" + streamName).build());
             ReaderGroup readerGroup = readerGroupManager.getReaderGroup(streamName);
             consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
             drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
