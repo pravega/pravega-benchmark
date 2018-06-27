@@ -84,6 +84,7 @@ public class PravegaPerfTest {
     private static CountDownLatch latch;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
+    private static int transactionPerCommit = 1;
 
     public static void main(String[] args) throws Exception {
 
@@ -144,7 +145,7 @@ public class PravegaPerfTest {
             if ( isTransaction ) {
                 workers[i] = new TransactionWriterWorker(i, eventsPerSec,
                         runtimeSec,
-                        isTransaction, isRandomKey, factory);
+                        isTransaction, isRandomKey, transactionPerCommit, factory);
             } else {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
                         isTransaction, isRandomKey, factory);
@@ -188,6 +189,7 @@ public class PravegaPerfTest {
         options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
+        options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
 
         options.addOption("help", false, "Help message");
 
@@ -247,6 +249,10 @@ public class PravegaPerfTest {
 
                 if (commandline.hasOption("randomkey")) {
                     isRandomKey = Boolean.parseBoolean(commandline.getOptionValue("randomkey"));
+                }
+
+                if (commandline.hasOption("transactionspercommit")) {
+                    transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
                 }
 
                 if (commandline.hasOption("kafka")) {
@@ -366,18 +372,27 @@ public class PravegaPerfTest {
 
     private static class TransactionWriterWorker extends WriterWorker {
 
-        private final Transaction<String> transaction;
+        private Transaction<String> transaction;
+        private final int transactionsPerCommit;
+        private int eventCount = 0;
 
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, boolean isRandomKey, ClientFactory factory) {
+                isTransaction, boolean isRandomKey, int transactionsPerCommit, ClientFactory factory) {
             super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, factory);
+            this.transactionsPerCommit = transactionsPerCommit;
             transaction = producer.beginTxn();
         }
 
         BiFunction<String, String, CompletableFuture> sendFunction() {
             return  ( key, data) -> {
                 try {
+                    eventCount++;
                     transaction.writeEvent(key, data);
+                    if (eventCount >= transactionsPerCommit) {
+                        eventCount = 0;
+                        transaction.commit();
+                        transaction = producer.beginTxn();
+                    }
                 } catch (TxnFailedException e) {
                     System.out.println("Publish to transaction failed");
                     e.printStackTrace();
