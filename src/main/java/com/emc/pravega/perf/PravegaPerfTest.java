@@ -305,12 +305,14 @@ public class PravegaPerfTest {
         void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
             CompletableFuture retFuture = null;
-            for (int i = 0; i < secondsToRun; i++) {
-                int currentEventsPerSec = 0;
+            final long StartTime = System.currentTimeMillis();
+            final long Mseconds = secondsToRun*1000;
+            long DiffTime = Mseconds;
+
+            do {
 
                 long loopStartTime = System.currentTimeMillis();
-                while ( currentEventsPerSec < eventsPerSec) {
-                    currentEventsPerSec++;
+                for (int i = 0; i < eventsPerSec; i++)  {
 
                     // Construct event payload
                     String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
@@ -351,7 +353,10 @@ public class PravegaPerfTest {
                     // log exception
                     System.exit(1);
                 }
-            }
+                DiffTime = System.currentTimeMillis() - StartTime; 
+ 
+            } while(DiffTime < Mseconds);
+
             producer.flush();
             //producer.close();
             try {
