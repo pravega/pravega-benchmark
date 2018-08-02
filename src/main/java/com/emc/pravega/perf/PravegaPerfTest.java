@@ -343,12 +343,9 @@ public class PravegaPerfTest {
                 long timeSpent = System.currentTimeMillis() - loopStartTime;
                 // wait for next event
                 try {
-                    //There is no need for sleep for blocking calls.
-                    if ( !blocking ) {
-                        if ( timeSpent < 1000) {
-                            Thread.sleep(1000 - timeSpent);
-                        }
-                    }
+                     if (timeSpent < 1000) {
+                          Thread.sleep(1000 - timeSpent);
+                     }
                 } catch (InterruptedException e) {
                     // log exception
                     System.exit(1);
