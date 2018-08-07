@@ -51,8 +51,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
-
 
 
 
@@ -70,6 +70,7 @@ public class PravegaPerfTest {
     private static ClientFactory factory = null;
     private static boolean onlyWrite = true;
     private static boolean blocking = false;
+    private static boolean fork = true;
     // How many producers should we run concurrently
     private static int producerCount = 20;
     private static int consumerCount = 20;
@@ -79,8 +80,14 @@ public class PravegaPerfTest {
     private static int runtimeSec = 10;
     // Should producers use Transaction or not
     private static boolean isTransaction = false;
-    private static int reportingInterval = 200;
+    /*
+     * recommended value for reporting interval ; 
+     * its better to keep 1000ms(1 second) to align with eventspersec 
+     */
+    private static int reportingInterval = 1000;
     private static ScheduledExecutorService executor;
+    private static ScheduledExecutorService bgexecutor;
+    private static ForkJoinPool  fjexecutor;
     private static CountDownLatch latch;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
@@ -88,11 +95,17 @@ public class PravegaPerfTest {
 
     public static void main(String[] args) throws Exception {
 
+        final long StartTime = System.currentTimeMillis();
+
         parseCmdLine(args);
 
         // Initialize executor
-        executor = Executors.newScheduledThreadPool(producerCount + consumerCount + 10);
-
+        if (fork) {
+           fjexecutor = new ForkJoinPool();
+        } else {
+           executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
+        } 
+        bgexecutor = Executors.newScheduledThreadPool(10);
         try {
             @Cleanup StreamManager streamManager = null;
             streamManager = StreamManager.create(new URI(controllerUri));
@@ -108,7 +121,6 @@ public class PravegaPerfTest {
             e.printStackTrace();
             System.exit(1);
         }
-
 
 
         if ( !onlyWrite ) {
@@ -129,10 +141,10 @@ public class PravegaPerfTest {
                 ReaderWorker reader = new ReaderWorker(i);
                 if(i == 0)
                     reader.cleanupEvents();
-                executor.execute(reader);
+                execute(reader);
             }
             if(consumerCount == 0)
-            readerGroup.initiateCheckpoint(streamName, executor);
+               readerGroup.initiateCheckpoint(streamName, bgexecutor);
         }
         produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
                 messageSize);
@@ -144,13 +156,13 @@ public class PravegaPerfTest {
 
             if ( isTransaction ) {
                 workers[i] = new TransactionWriterWorker(i, eventsPerSec,
-                        runtimeSec,
-                        isTransaction, isRandomKey, transactionPerCommit, factory);
+                        runtimeSec,isTransaction, isRandomKey, 
+                        transactionPerCommit, StartTime, factory);
             } else {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, isRandomKey, factory);
+                        isTransaction, isRandomKey, StartTime, factory);
             }
-            executor.execute(workers[i]);
+            execute(workers[i]);
 
         }
 
@@ -162,9 +174,9 @@ public class PravegaPerfTest {
             produceStats.printTotal();
         }
 
-        executor.shutdown();
+        shutdown();
         // Wait until all threads are finished.
-        executor.awaitTermination(1, TimeUnit.HOURS);
+        awaitTermination(1, TimeUnit.HOURS);
 
 
         if ( !onlyWrite && consumerCount != 0 ) {
@@ -172,6 +184,33 @@ public class PravegaPerfTest {
         }
         System.exit(0);
     }
+
+   
+    private static void execute(Runnable task ) throws Exception {
+        if (fork) {
+            fjexecutor.execute(task);
+        } else  {
+            executor.execute(task);
+       }
+    }
+
+
+    private static void shutdown() throws Exception {
+        if (fork) {
+           fjexecutor.shutdown();
+        } else  {
+           executor.shutdown();
+       }
+    }
+       
+    private static boolean awaitTermination (long timeout,
+                       TimeUnit unit) throws InterruptedException {
+        if (fork) {
+          return  fjexecutor.awaitTermination(timeout,unit);  
+       } else {
+          return  executor.awaitTermination(timeout,unit); 
+       }    
+    } 
 
     private static void parseCmdLine(String[] args) {
         // create Options object
@@ -190,6 +229,8 @@ public class PravegaPerfTest {
         options.addOption("reporting", true, "Reporting internval");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
+        options.addOption("fork", true, " Use fork join framework for parallel threads");
+
 
         options.addOption("help", false, "Help message");
 
@@ -259,6 +300,9 @@ public class PravegaPerfTest {
                     runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
                 }
 
+                if (commandline.hasOption("fork")) {
+                    fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
+                }
             }
         } catch (Exception nfe) {
             System.out.println("Invalid arguments. Starting with default values");
@@ -277,13 +321,15 @@ public class PravegaPerfTest {
         private final int eventsPerSec;
         private final int secondsToRun;
         private final boolean isTransaction;
+	private final long StartTime;
 
         WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction, boolean isRandomKey,
-                     ClientFactory factory) {
+                     long start, ClientFactory factory) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
             this.isTransaction = isTransaction;
+            this.StartTime = start;
             this.producer = factory.createEventWriter(streamName,
                     new JavaSerializer<String>(),
                     EventWriterConfig.builder().build());
@@ -305,12 +351,13 @@ public class PravegaPerfTest {
         void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
             CompletableFuture retFuture = null;
-            for (int i = 0; i < secondsToRun; i++) {
-                int currentEventsPerSec = 0;
+            final long Mseconds = secondsToRun*1000;
+            long DiffTime = Mseconds;
+
+            do {
 
                 long loopStartTime = System.currentTimeMillis();
-                while ( currentEventsPerSec < eventsPerSec) {
-                    currentEventsPerSec++;
+                for (int i = 0; i < eventsPerSec; i++)  {
 
                     // Construct event payload
                     String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
@@ -327,7 +374,7 @@ public class PravegaPerfTest {
                                 return fn.apply(key, payload);
                             },
                             now,
-                            payload.length(), executor);
+                            payload.length());
                     //If it is a blocking call, wait for the ack
                     if ( blocking ) {
                         try {
@@ -341,17 +388,17 @@ public class PravegaPerfTest {
                 long timeSpent = System.currentTimeMillis() - loopStartTime;
                 // wait for next event
                 try {
-                    //There is no need for sleep for blocking calls.
-                    if ( !blocking ) {
-                        if ( timeSpent < 1000) {
-                            Thread.sleep(1000 - timeSpent);
-                        }
-                    }
+                     if (timeSpent < 1000) {
+                          Thread.sleep(1000 - timeSpent);
+                     }
                 } catch (InterruptedException e) {
                     // log exception
                     System.exit(1);
                 }
-            }
+                DiffTime = System.currentTimeMillis() - StartTime; 
+ 
+            } while(DiffTime < Mseconds);
+
             producer.flush();
             //producer.close();
             try {
@@ -377,8 +424,8 @@ public class PravegaPerfTest {
         private int eventCount = 0;
 
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, boolean isRandomKey, int transactionsPerCommit, ClientFactory factory) {
-            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, factory);
+                isTransaction, boolean isRandomKey, int transactionsPerCommit, long start, ClientFactory factory) {
+            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, start, factory);
             this.transactionsPerCommit = transactionsPerCommit;
             transaction = producer.beginTxn();
         }
@@ -432,7 +479,7 @@ public class PravegaPerfTest {
                     if(result.getEvent()!=null) {
                         drainStats.runAndRecordTime(() -> {
                             return null;
-                        }, startTime, result.getEvent().length(), executor);
+                        }, startTime, result.getEvent().length());
                     } else break;
                 }while (true);
                 drainStats.printTotal();
@@ -456,7 +503,7 @@ public class PravegaPerfTest {
                         counter = totalEvents.decrementAndGet();
                          consumeStats.runAndRecordTime(() -> {
                             return null;
-                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length(), executor);
+                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
 
                     }while (counter > 0);
                 } catch (ReinitializationRequiredException e) {

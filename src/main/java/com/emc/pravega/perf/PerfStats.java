@@ -145,7 +145,7 @@ class PerfStats {
         return values;
     }
 
-    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length, Executor executor) {
+    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) {
         int iter = this.iteration++;
         CompletableFuture  retVal = fn.get();
         if(retVal == null) {
