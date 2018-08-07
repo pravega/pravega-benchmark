@@ -95,6 +95,8 @@ public class PravegaPerfTest {
 
     public static void main(String[] args) throws Exception {
 
+        final long StartTime = System.currentTimeMillis();
+
         parseCmdLine(args);
 
         // Initialize executor
@@ -154,11 +156,11 @@ public class PravegaPerfTest {
 
             if ( isTransaction ) {
                 workers[i] = new TransactionWriterWorker(i, eventsPerSec,
-                        runtimeSec,
-                        isTransaction, isRandomKey, transactionPerCommit, factory);
+                        runtimeSec,isTransaction, isRandomKey, 
+                        transactionPerCommit, StartTime, factory);
             } else {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, isRandomKey, factory);
+                        isTransaction, isRandomKey, StartTime, factory);
             }
             execute(workers[i]);
 
@@ -319,13 +321,15 @@ public class PravegaPerfTest {
         private final int eventsPerSec;
         private final int secondsToRun;
         private final boolean isTransaction;
+	private final long StartTime;
 
         WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction, boolean isRandomKey,
-                     ClientFactory factory) {
+                     long start, ClientFactory factory) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
             this.isTransaction = isTransaction;
+            this.StartTime = start;
             this.producer = factory.createEventWriter(streamName,
                     new JavaSerializer<String>(),
                     EventWriterConfig.builder().build());
@@ -347,7 +351,6 @@ public class PravegaPerfTest {
         void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
             CompletableFuture retFuture = null;
-            final long StartTime = System.currentTimeMillis();
             final long Mseconds = secondsToRun*1000;
             long DiffTime = Mseconds;
 
@@ -421,8 +424,8 @@ public class PravegaPerfTest {
         private int eventCount = 0;
 
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, boolean isRandomKey, int transactionsPerCommit, ClientFactory factory) {
-            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, factory);
+                isTransaction, boolean isRandomKey, int transactionsPerCommit, long start, ClientFactory factory) {
+            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, start, factory);
             this.transactionsPerCommit = transactionsPerCommit;
             transaction = producer.beginTxn();
         }
