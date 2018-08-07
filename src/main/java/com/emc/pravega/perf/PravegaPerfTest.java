@@ -80,7 +80,11 @@ public class PravegaPerfTest {
     private static int runtimeSec = 10;
     // Should producers use Transaction or not
     private static boolean isTransaction = false;
-    private static int reportingInterval = 200;
+    /*
+     * recommended value for reporting interval ; 
+     * its better to keep 1000ms(1 second) to align with eventspersec 
+     */
+    private static int reportingInterval = 1000;
     private static ScheduledExecutorService executor;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool  fjexecutor;
