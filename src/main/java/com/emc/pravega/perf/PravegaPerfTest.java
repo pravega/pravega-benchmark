@@ -377,15 +377,16 @@ public class PravegaPerfTest {
                     // Construct event payload
                     String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
                     String payload = String.format("%-" + messageSize + "s", val);
+                    String key;
+                    if (isRandomKey) {
+                        key = Integer.toString(producerId + new Random().nextInt());
+                    } else {
+                        key = Integer.toString(producerId);
+                    }
+                   
                     // event ingestion
                     long now = System.currentTimeMillis();
                     retFuture = produceStats.runAndRecordTime(() -> {
-                                String key;
-                                if (isRandomKey) {
-                                    key = Integer.toString(producerId + new Random().nextInt());
-                                } else {
-                                    key = Integer.toString(producerId);
-                                }
                                 return fn.apply(key, payload);
                             },
                             now,
