@@ -74,6 +74,7 @@ public class PravegaPerfTest {
     // How many producers should we run concurrently
     private static int producerCount = 20;
     private static int consumerCount = 20;
+    private static int segmentCount = 20;
     // How many events each producer has to produce per seconds
     private static int eventsPerSec = 40;
     // How long it needs to run
@@ -108,13 +109,20 @@ public class PravegaPerfTest {
         bgexecutor = Executors.newScheduledThreadPool(10);
         try {
             @Cleanup StreamManager streamManager = null;
+            StreamConfiguration streamconfig = null;
             streamManager = StreamManager.create(new URI(controllerUri));
             streamManager.createScope("Scope");
+            streamconfig = StreamConfiguration.builder().scope("Scope").streamName(streamName)
+                            .scalingPolicy(ScalingPolicy.fixed(segmentCount))
+                            .build();
 
-            streamManager.createStream("Scope", streamName,
-                    StreamConfiguration.builder().scope("Scope").streamName(streamName)
-                            .scalingPolicy(ScalingPolicy.fixed(producerCount))
-                            .build());
+            if (!streamManager.createStream("Scope", streamName,streamconfig)) {
+               System.out.println("The stream: " + streamName + " may already exists, so updating to "+ segmentCount+ " segments");
+               if (!streamManager.updateStream("Scope", streamName,streamconfig)) {
+                   System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
+                   System.exit(1);
+               } 
+            }
 
             factory = ClientFactory.withScope("Scope", new URI(controllerUri));
         } catch (URISyntaxException e) {
@@ -229,6 +237,7 @@ public class PravegaPerfTest {
         options.addOption("reporting", true, "Reporting internval");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
+        options.addOption("segments", true, " Number of segments");
         options.addOption("fork", true, " Use fork join framework for parallel threads");
 
 
@@ -298,6 +307,12 @@ public class PravegaPerfTest {
 
                 if (commandline.hasOption("kafka")) {
                     runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+                }
+
+                if (commandline.hasOption("segments")) {
+                    segmentCount = Integer.parseInt(commandline.getOptionValue("segments"));
+                } else {
+                    segmentCount = producerCount; 
                 }
 
                 if (commandline.hasOption("fork")) {
