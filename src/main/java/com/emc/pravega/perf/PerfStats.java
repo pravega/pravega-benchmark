@@ -68,7 +68,8 @@ class PerfStats {
         }
     }
 
-    public synchronized void record(int iter, int latencyMicro, int bytes, long time) {
+    public synchronized void record(int iter, int bytes, long startTime, long endTime) {
+        int latencyMicro = (int)(endTime-startTime)*1000;
         this.count++;
         this.bytes += bytes;
         this.totalLatency += latencyMicro;
@@ -81,23 +82,21 @@ class PerfStats {
             this.latencies[index] = latencyMicro;
             this.index++;
         }
-        /* maybe report the recent perf */
-        if (count - windowStart >= reportingInterval) {
-            printWindow();
+        /* did we arrived at reporting time */
+        if (endTime - windowStartTime  >= reportingInterval) {
+            printWindow(endTime);
             newWindow(count);
         }
     }
 
-    private void printWindow() {
-        long elapsed = System.currentTimeMillis() - windowStartTime;
+    private void printWindow(long endTime) {
+        long elapsed = endTime - windowStartTime;
         double recsPerSec = 1000.0 * windowCount / (double) elapsed;
         double mbPerSec = 1000.0 * this.windowBytes / (double) elapsed / (1024.0 * 1024.0);
-        System.out.printf("%d records %s, %.1f records/sec (%.5f MB/sec), %.1f ms avg latency, %.1f max latency.\n",
-                windowCount, action, recsPerSec, mbPerSec, windowTotalLatency / ((double) windowCount * 1000.0),
-                (double) windowMaxLatency / 1000.0);
-        System.out.printf(" WINDOW: %d, %d, %.1f ,%.5f MB/sec, %.1f, %.1f \n",
-                messageSize, windowCount, recsPerSec, mbPerSec, windowTotalLatency / ((double) windowCount * 1000.0),
-                (double) windowMaxLatency / 1000.0);
+        System.out.printf("%8d records %s, %9.1f records/sec, %9.3f MB/sec, %7.3f ms avg latency, %7.1f max latency.\n",
+                windowCount, action, recsPerSec, mbPerSec,  
+                (double)(windowTotalLatency / (windowCount*1000.0)),
+                (double) windowMaxLatency/1000.0);
     }
 
     private void newWindow(long currentNumber) {
@@ -118,18 +117,18 @@ class PerfStats {
         */
     }
 
-    public synchronized void printTotal() {
-        long elapsed = System.currentTimeMillis() - start;
+    public synchronized void printTotal(long endTime) {
+        long elapsed = endTime - start;
         double recsPerSec = 1000.0 * count / (double) elapsed;
         double mbPerSec = 1000.0 * this.bytes / (double) elapsed / (1024.0 * 1024.0);
         long[] percs = percentiles(this.latencies, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(
-                "%d records sent, %f records/sec (%.5f MB/sec), %.2f ms avg latency, %.2f ms max " + "latency, %.2f " +
+                "%d records sent, %f records/sec, %.5f MB/sec, %.4f ms avg latency, %.2f ms max " + "latency, %.2f " +
                         "ms 50th, %.2f ms 95th, %.2f ms 99th, %.2f ms 99.9th.\n",
                 count, recsPerSec, mbPerSec, totalLatency / ((double) count * 1000.0), (double) maxLatency / 1000.0,
                 percs[0] / 1000.0, percs[1] / 1000.0, percs[2] / 1000.0, percs[3] / 1000.0);
         System.out.printf(
-                " %s FINAL:, %d, %.5f MB/sec, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n", this.action,
+                "%s FINAL: %d, %.5f MB/sec, %.4f, %.2f, %.2f, %.2f, %.2f, %.2f\n", this.action,
                 messageSize, mbPerSec, totalLatency / ((double) count * 1000.0), (double) maxLatency / 1000.0,
                 percs[0] / 1000.0, percs[1] / 1000.0, percs[2] / 1000.0, percs[3] / 1000.0);
     }
@@ -148,11 +147,12 @@ class PerfStats {
     public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) {
         int iter = this.iteration++;
         CompletableFuture  retVal = fn.get();
+        long endTime = System.currentTimeMillis(); 
         if(retVal == null) {
-            record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
+            record(iter, length,startTime,  endTime);
         } else {
             retVal = retVal.thenAccept((d) -> {
-                record(iter, (int) (System.currentTimeMillis() - startTime) * 1000, length, System.nanoTime());
+                record(iter, length,startTime, endTime);
             });
         }
         return retVal;

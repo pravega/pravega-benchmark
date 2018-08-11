@@ -154,8 +154,7 @@ public class PravegaPerfTest {
             if(consumerCount == 0)
                readerGroup.initiateCheckpoint(streamName, bgexecutor);
         }
-        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
-                messageSize);
+        
         WriterWorker workers[] = new WriterWorker[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
         latch = new CountDownLatch(producerCount);
@@ -170,16 +169,23 @@ public class PravegaPerfTest {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
                         isTransaction, isRandomKey, StartTime, factory);
             }
-            execute(workers[i]);
+         } 
 
+        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
+                messageSize);          
+
+
+         for (int i = 0; i < producerCount; i++) {
+             execute(workers[i]);
         }
 
-       latch.await();
+        latch.await();
+        long endTime = System.currentTimeMillis(); 
 
         System.out.println("\nFinished all producers");
         if(producerCount != 0) {
             produceStats.printAll();
-            produceStats.printTotal();
+            produceStats.printTotal(endTime);
         }
 
         shutdown();
@@ -188,7 +194,7 @@ public class PravegaPerfTest {
 
 
         if ( !onlyWrite && consumerCount != 0 ) {
-            consumeStats.printTotal();
+            consumeStats.printTotal(System.currentTimeMillis());
         }
         System.exit(0);
     }
@@ -230,15 +236,15 @@ public class PravegaPerfTest {
         options.addOption("eventspersec", true, "number events per sec");
         options.addOption("runtime", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
-        options.addOption("size", true, "Size of each message");
+        options.addOption("size", true, "Size of each message (record)");
         options.addOption("stream", true, "Stream name");
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
-        options.addOption("reporting", true, "Reporting internval");
+        options.addOption("reporting", true, "Reporting internval in milliseconds, default set to 1000ms (1 sec)");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
-        options.addOption("segments", true, " Number of segments");
-        options.addOption("fork", true, " Use fork join framework for parallel threads");
+        options.addOption("segments", true, "Number of segments");
+        options.addOption("fork", true, "Use fork join framework for parallel threads");
 
 
         options.addOption("help", false, "Help message");
@@ -401,6 +407,7 @@ public class PravegaPerfTest {
                     }
 
                 }
+
                 long timeSpent = System.currentTimeMillis() - loopStartTime;
                 // wait for next event
                 try {
@@ -411,12 +418,13 @@ public class PravegaPerfTest {
                     // log exception
                     System.exit(1);
                 }
+
                 DiffTime = System.currentTimeMillis() - StartTime; 
  
             } while(DiffTime < Mseconds);
 
             producer.flush();
-            //producer.close();
+            // producer.close();
             try {
                 //Wait for the last packet to get acked
                 retFuture.get();
@@ -498,7 +506,7 @@ public class PravegaPerfTest {
                         }, startTime, result.getEvent().length());
                     } else break;
                 }while (true);
-                drainStats.printTotal();
+                drainStats.printTotal(System.currentTimeMillis());
             } catch (ReinitializationRequiredException e) {
                 e.printStackTrace();
             }
