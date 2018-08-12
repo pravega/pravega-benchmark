@@ -55,7 +55,6 @@ class PerfStats {
             this.iteration = 0;
             this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
             this.latencies = new long[(int) (numRecords / this.sampling)];
-            this.index = 0;
             this.maxLatency = 0;
             this.totalLatency = 0;
             this.windowCount = 0;
@@ -158,4 +157,30 @@ class PerfStats {
         return retVal;
 
     }
+
+    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length, boolean blocking ) {
+        CompletableFuture  retVal=null;
+        long startTime, endTime;
+        int iter = this.iteration++;
+        startTime = System.currentTimeMillis();
+        try {
+             retVal = fn.get();
+             if (blocking) {
+                  retVal.get();
+             }
+        } catch (Exception e) {
+             e.printStackTrace();
+        }
+        endTime = System.currentTimeMillis();
+        
+        if(retVal == null) {
+            record(iter, length, startTime,  endTime);
+        } else {
+            retVal = retVal.thenAccept((d) -> {
+                record(iter, length, startTime, endTime);
+            });
+        }
+        return retVal;
+    }
+
 }

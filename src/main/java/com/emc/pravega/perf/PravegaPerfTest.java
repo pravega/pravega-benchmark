@@ -391,20 +391,10 @@ public class PravegaPerfTest {
                     }
                    
                     // event ingestion
-                    long now = System.currentTimeMillis();
-                    retFuture = produceStats.runAndRecordTime(() -> {
+                    retFuture = produceStats.writeAndRecordTime(() -> {
                                 return fn.apply(key, payload);
                             },
-                            now,
-                            payload.length());
-                    //If it is a blocking call, wait for the ack
-                    if ( blocking ) {
-                        try {
-                            retFuture.get();
-                        } catch (InterruptedException  | ExecutionException e) {
-                            e.printStackTrace();
-                        }
-                    }
+                            payload.length(), blocking);
 
                 }
 
@@ -416,6 +406,7 @@ public class PravegaPerfTest {
                      }
                 } catch (InterruptedException e) {
                     // log exception
+                    e.printStackTrace();
                     System.exit(1);
                 }
 
@@ -425,11 +416,14 @@ public class PravegaPerfTest {
 
             producer.flush();
             // producer.close();
-            try {
-                //Wait for the last packet to get acked
-                retFuture.get();
-            } catch (InterruptedException | ExecutionException e ) {
-                e.printStackTrace();
+            
+            if (!blocking) {
+                try {
+                   //Wait for the last packet to get acked
+                   retFuture.get();
+                } catch (InterruptedException | ExecutionException e ) {
+                   e.printStackTrace();
+                }
             }
         }
 
