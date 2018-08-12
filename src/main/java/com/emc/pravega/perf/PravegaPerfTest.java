@@ -100,13 +100,6 @@ public class PravegaPerfTest {
 
         parseCmdLine(args);
 
-        // Initialize executor
-        if (fork) {
-           fjexecutor = new ForkJoinPool();
-        } else {
-           executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
-        } 
-        bgexecutor = Executors.newScheduledThreadPool(10);
         try {
             @Cleanup StreamManager streamManager = null;
             StreamConfiguration streamconfig = null;
@@ -130,6 +123,15 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
+
+        // Initialize executor
+        if (fork) {
+           fjexecutor = new ForkJoinPool();
+        } else {
+           executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
+        }
+
+        bgexecutor = Executors.newScheduledThreadPool(10);
 
         if ( !onlyWrite ) {
             ReaderGroupManager readerGroupManager = null;
