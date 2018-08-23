@@ -17,6 +17,7 @@
  */
 package com.emc.pravega.perf;
 
+import io.pravega.client.ClientConfig;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.admin.ReaderGroupManager;
 import io.pravega.client.admin.StreamManager;
@@ -33,6 +34,9 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
+import io.pravega.client.stream.impl.ControllerImpl;
+import io.pravega.client.stream.impl.ControllerImplConfig;
+import io.pravega.client.stream.impl.ClientFactoryImpl;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
@@ -93,6 +97,7 @@ public class PravegaPerfTest {
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
+    private static ControllerImpl controller = null;
 
     public static void main(String[] args) throws Exception {
 
@@ -100,14 +105,25 @@ public class PravegaPerfTest {
 
         parseCmdLine(args);
 
+        // Initialize executor
+        bgexecutor = Executors.newScheduledThreadPool(10);
+
+
         try {
             @Cleanup StreamManager streamManager = null;
             StreamConfiguration streamconfig = null;
-            streamManager = StreamManager.create(new URI(controllerUri));
+            URI uri= new URI(controllerUri);
+            streamManager = StreamManager.create(uri);
             streamManager.createScope("Scope");
             streamconfig = StreamConfiguration.builder().scope("Scope").streamName(streamName)
                             .scalingPolicy(ScalingPolicy.fixed(segmentCount))
                             .build();
+           
+            controller = new ControllerImpl(ControllerImplConfig.builder()
+                                    .clientConfig(ClientConfig.builder().controllerURI(uri).build())
+                                    .maxBackoffMillis(5000).build(),
+                                     bgexecutor);
+
 
             if (!streamManager.createStream("Scope", streamName,streamconfig)) {
                System.out.println("The stream: " + streamName + " may already exists, so updating to "+ segmentCount+ " segments");
@@ -117,21 +133,18 @@ public class PravegaPerfTest {
                } 
             }
 
-            factory = ClientFactory.withScope("Scope", new URI(controllerUri));
+            factory = new ClientFactoryImpl("Scope", controller);  
+
         } catch (URISyntaxException e) {
             e.printStackTrace();
             System.exit(1);
         }
 
-
-        // Initialize executor
         if (fork) {
            fjexecutor = new ForkJoinPool();
         } else {
            executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
         }
-
-        bgexecutor = Executors.newScheduledThreadPool(10);
 
         if ( !onlyWrite ) {
             ReaderGroupManager readerGroupManager = null;
