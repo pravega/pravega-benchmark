@@ -37,6 +37,7 @@ import io.pravega.client.stream.impl.JavaSerializer;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
+import io.pravega.client.stream.impl.StreamImpl;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
@@ -46,7 +47,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;
@@ -57,8 +57,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
-
-
+import java.util.Collections;
+import java.util.Map;
+import java.util.HashMap;
+//import java.util.TreeMap;
 
 /**
  * Performance benchmark for Pravega.
@@ -71,6 +73,7 @@ public class PravegaPerfTest {
     private static String controllerUri = "tcp://localhost:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
+    private static String scopeName = StartLocalService.SCOPE;
     private static ClientFactory factory = null;
     private static boolean onlyWrite = true;
     private static boolean blocking = false;
@@ -114,8 +117,8 @@ public class PravegaPerfTest {
             StreamConfiguration streamconfig = null;
             URI uri= new URI(controllerUri);
             streamManager = StreamManager.create(uri);
-            streamManager.createScope("Scope");
-            streamconfig = StreamConfiguration.builder().scope("Scope").streamName(streamName)
+            streamManager.createScope(scopeName);
+            streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
                             .scalingPolicy(ScalingPolicy.fixed(segmentCount))
                             .build();
            
@@ -125,15 +128,63 @@ public class PravegaPerfTest {
                                      bgexecutor);
 
 
-            if (!streamManager.createStream("Scope", streamName,streamconfig)) {
-               System.out.println("The stream: " + streamName + " may already exists, so updating to "+ segmentCount+ " segments");
-               if (!streamManager.updateStream("Scope", streamName,streamconfig)) {
+            if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+               System.out.println("The stream: " + streamName + " may already exists, so manually scaling to "+ segmentCount+ " segments");
+               /*
+               if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
                    System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
                    System.exit(1);
                } 
+               */
+
+              System.out.println("Current active segments for stream = " + controller.getCurrentSegments(scopeName, streamName).get());  
+
+              int nseg= controller.getCurrentSegments(scopeName, streamName).get().getSegments().size();
+              System.out.println("Number of Segments before manual scale: "+nseg);
+
+              Map<Double, Double> keyRanges = getKeyRanges(segmentCount);
+           
+              /*
+              System.out.println("The key ranges are");
+              Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+
+              map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+              */
+              
+              
+              CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
+                    Collections.singletonList( (long)nseg),
+                    keyRanges,
+                    bgexecutor).getFuture();
+
+              if (scaleStatus.get()) {
+                  System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
+                    .get().getSegments().size());
+              } else {  
+                  System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                  System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
+                  CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
+                  if (!sealStatus.get()) {
+                    System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
+                    System.exit(1);
+                  }
+
+                  CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
+                  if (!status.get()) {
+                    System.out.println("ERROR : stream: "+ streamName+" delete failed");
+                    System.exit(1);
+                  }
+
+                  if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+                    System.out.println("ERROR : stream: "+ streamName+" recreation failed");
+                    System.exit(1);
+                     
+                  } 
+              }
+
             }
 
-            factory = new ClientFactoryImpl("Scope", controller);  
+            factory = new ClientFactoryImpl(scopeName, controller);  
 
         } catch (URISyntaxException e) {
             e.printStackTrace();
@@ -345,6 +396,22 @@ public class PravegaPerfTest {
             nfe.printStackTrace();
         }
     }
+
+
+    private static Map getKeyRanges(int segments){
+        Double w = Math.round((1.0/segments)*1000)/1000.0;
+        Double val=0.0, nxt=0.0;
+        Map<Double, Double> keyRanges = new HashMap<>();
+        for (int i=0; i< segments;i++){
+            nxt = Math.round((val+w)*1000)/1000.0;
+            if (nxt > 1.0)
+                  nxt = 1.0;
+            keyRanges.put(val, nxt);
+            val = nxt;
+        }
+        return keyRanges;
+    }
+
 
     /**
      * A Sensor simulator class that generates dummy value as temperature measurement and ingests to specified stream.
