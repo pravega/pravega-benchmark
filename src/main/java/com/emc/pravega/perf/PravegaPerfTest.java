@@ -77,6 +77,7 @@ public class PravegaPerfTest {
     private static ClientFactory factory = null;
     private static boolean onlyWrite = true;
     private static boolean blocking = false;
+    private static boolean recreate = false;
     private static boolean fork = true;
     // How many producers should we run concurrently
     private static int producerCount = 20;
@@ -101,6 +102,8 @@ public class PravegaPerfTest {
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
     private static ControllerImpl controller = null;
+    private static int timeout = 5;
+
 
     public static void main(String[] args) throws Exception {
 
@@ -129,48 +132,52 @@ public class PravegaPerfTest {
 
 
             if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
-               System.out.println("The stream: " + streamName + " may already exists, so manually scaling to "+ segmentCount+ " segments");
                /*
                if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
                    System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
                    System.exit(1);
                } 
                */
+         
+              int nseg = controller.getCurrentSegments(scopeName, streamName).get().getSegments().size();
+              System.out.println("Current active segments for stream: "+streamName+ " = " + nseg);  
 
-              System.out.println("Current active segments for stream = " + controller.getCurrentSegments(scopeName, streamName).get());  
-
-              int nseg= controller.getCurrentSegments(scopeName, streamName).get().getSegments().size();
-              System.out.println("Number of Segments before manual scale: "+nseg);
-
-              Map<Double, Double> keyRanges = getKeyRanges(segmentCount);
+              if (!recreate ) {
+                  System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
+              	  Map<Double, Double> keyRanges = getKeyRanges(segmentCount);
            
-              /*
-              System.out.println("The key ranges are");
-              Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+                  /*
+                  System.out.println("The key ranges are");
+                  Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
 
-              map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
-              */
+                  map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+                  */
               
               
-              CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
-                    Collections.singletonList( (long)nseg),
-                    keyRanges,
-                    bgexecutor).getFuture();
+                  CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
+                                                           Collections.singletonList( (long)nseg),
+                                                           keyRanges,
+                                                           bgexecutor).getFuture();
 
-              if (scaleStatus.get()) {
+              
+                  if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
+                     System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                     System.exit(1);
+                  }
+
                   System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
-                    .get().getSegments().size());
-              } else {  
-                  System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                         .get().getSegments().size());
+         
+              } else {
                   System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
                   CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
-                  if (!sealStatus.get()) {
+                  if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
                     System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
                     System.exit(1);
                   }
 
                   CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
-                  if (!status.get()) {
+                  if (!status.get(timeout, TimeUnit.SECONDS)) {
                     System.out.println("ERROR : stream: "+ streamName+" delete failed");
                     System.exit(1);
                   }
@@ -178,15 +185,16 @@ public class PravegaPerfTest {
                   if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
                     System.out.println("ERROR : stream: "+ streamName+" recreation failed");
                     System.exit(1);
-                     
-                  } 
-              }
+
+                  }
+
+              } 
 
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);  
 
-        } catch (URISyntaxException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
@@ -311,7 +319,7 @@ public class PravegaPerfTest {
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
         options.addOption("fork", true, "Use fork join framework for parallel threads");
-
+        options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
 
         options.addOption("help", false, "Help message");
 
@@ -390,6 +398,11 @@ public class PravegaPerfTest {
                 if (commandline.hasOption("fork")) {
                     fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
                 }
+
+                if (commandline.hasOption("recreate")) {
+                    recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+                }
+
             }
         } catch (Exception nfe) {
             System.out.println("Invalid arguments. Starting with default values");
