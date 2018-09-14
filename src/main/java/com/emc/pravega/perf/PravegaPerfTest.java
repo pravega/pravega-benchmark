@@ -38,6 +38,8 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 import io.pravega.client.stream.impl.StreamImpl;
+import io.pravega.client.stream.impl.StreamSegments;
+import io.pravega.client.segment.impl.Segment;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
@@ -57,10 +59,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
-import java.util.Collections;
+import java.util.stream.Collectors;
+import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-//import java.util.TreeMap;
+import java.util.TreeMap;
+import java.util.stream.IntStream;
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.AbstractMap.SimpleImmutableEntry;
+
 
 /**
  * Performance benchmark for Pravega.
@@ -102,7 +110,7 @@ public class PravegaPerfTest {
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
     private static ControllerImpl controller = null;
-    private static int timeout = 5;
+    private static int timeout = 10;
 
 
     public static void main(String[] args) throws Exception {
@@ -138,26 +146,32 @@ public class PravegaPerfTest {
                    System.exit(1);
                } 
                */
+
+
+              StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
          
-              int nseg = controller.getCurrentSegments(scopeName, streamName).get().getSegments().size();
-              System.out.println("Current active segments for stream: "+streamName+ " = " + nseg);  
+              final int nseg = segments.getSegments().size();
+              System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
 
               if (!recreate ) {
                   System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
-              	  Map<Double, Double> keyRanges = getKeyRanges(segmentCount);
-           
-                  /*
+                  final double keyRangeChunk = 1.0 / segmentCount;
+                  final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
+                                                                 .boxed()
+                                                                 .collect(Collectors.toMap(x -> x * keyRangeChunk ,  x->(x + 1) * keyRangeChunk)); 
+                  final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
+
+                  /*      
                   System.out.println("The key ranges are");
                   Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
 
                   map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+                  System.out.println("segments list:"+segmentList);
                   */
-              
-              
                   CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
-                                                           Collections.singletonList( (long)nseg),
-                                                           keyRanges,
-                                                           bgexecutor).getFuture();
+                                                                       segmentList,
+                                                                       keyRanges,
+                                                                       bgexecutor).getFuture();
 
               
                   if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
@@ -408,21 +422,6 @@ public class PravegaPerfTest {
             System.out.println("Invalid arguments. Starting with default values");
             nfe.printStackTrace();
         }
-    }
-
-
-    private static Map getKeyRanges(int segments){
-        Double w = Math.round((1.0/segments)*1000)/1000.0;
-        Double val=0.0, nxt=0.0;
-        Map<Double, Double> keyRanges = new HashMap<>();
-        for (int i=0; i< segments;i++){
-            nxt = Math.round((val+w)*1000)/1000.0;
-            if (nxt > 1.0)
-                  nxt = 1.0;
-            keyRanges.put(val, nxt);
-            val = nxt;
-        }
-        return keyRanges;
     }
 
 
