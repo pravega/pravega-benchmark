@@ -17,6 +17,7 @@
  */
 package com.emc.pravega.perf;
 
+import io.pravega.client.ClientConfig;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.admin.ReaderGroupManager;
 import io.pravega.client.admin.StreamManager;
@@ -33,6 +34,12 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
+import io.pravega.client.stream.impl.ControllerImpl;
+import io.pravega.client.stream.impl.ControllerImplConfig;
+import io.pravega.client.stream.impl.ClientFactoryImpl;
+import io.pravega.client.stream.impl.StreamImpl;
+import io.pravega.client.stream.impl.StreamSegments;
+import io.pravega.client.segment.impl.Segment;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
@@ -42,7 +49,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;
@@ -53,7 +59,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
-
+import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.TreeMap;
+import java.util.stream.IntStream;
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.AbstractMap.SimpleImmutableEntry;
 
 
 /**
@@ -67,9 +81,11 @@ public class PravegaPerfTest {
     private static String controllerUri = "tcp://localhost:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
+    private static String scopeName = StartLocalService.SCOPE;
     private static ClientFactory factory = null;
     private static boolean onlyWrite = true;
     private static boolean blocking = false;
+    private static boolean recreate = false;
     private static boolean fork = true;
     // How many producers should we run concurrently
     private static int producerCount = 20;
@@ -93,6 +109,9 @@ public class PravegaPerfTest {
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
+    private static ControllerImpl controller = null;
+    private static int timeout = 10;
+
 
     public static void main(String[] args) throws Exception {
 
@@ -100,38 +119,105 @@ public class PravegaPerfTest {
 
         parseCmdLine(args);
 
+        // Initialize executor
+        bgexecutor = Executors.newScheduledThreadPool(10);
+
+
         try {
             @Cleanup StreamManager streamManager = null;
             StreamConfiguration streamconfig = null;
-            streamManager = StreamManager.create(new URI(controllerUri));
-            streamManager.createScope("Scope");
-            streamconfig = StreamConfiguration.builder().scope("Scope").streamName(streamName)
+            URI uri= new URI(controllerUri);
+            streamManager = StreamManager.create(uri);
+            streamManager.createScope(scopeName);
+            streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
                             .scalingPolicy(ScalingPolicy.fixed(segmentCount))
                             .build();
+           
+            controller = new ControllerImpl(ControllerImplConfig.builder()
+                                    .clientConfig(ClientConfig.builder().controllerURI(uri).build())
+                                    .maxBackoffMillis(5000).build(),
+                                     bgexecutor);
 
-            if (!streamManager.createStream("Scope", streamName,streamconfig)) {
-               System.out.println("The stream: " + streamName + " may already exists, so updating to "+ segmentCount+ " segments");
-               if (!streamManager.updateStream("Scope", streamName,streamconfig)) {
+
+            if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+               /*
+               if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
                    System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
                    System.exit(1);
                } 
+               */
+
+
+              StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
+         
+              final int nseg = segments.getSegments().size();
+              System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
+
+              if (!recreate ) {
+                  System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
+                  final double keyRangeChunk = 1.0 / segmentCount;
+                  final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
+                                                                 .boxed()
+                                                                 .collect(Collectors.toMap(x -> x * keyRangeChunk ,  x->(x + 1) * keyRangeChunk)); 
+                  final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
+
+                  /*      
+                  System.out.println("The key ranges are");
+                  Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+
+                  map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+                  System.out.println("segments list:"+segmentList);
+                  */
+                  CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
+                                                                       segmentList,
+                                                                       keyRanges,
+                                                                       bgexecutor).getFuture();
+
+              
+                  if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
+                     System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                     System.exit(1);
+                  }
+
+                  System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
+                         .get().getSegments().size());
+         
+              } else {
+                  System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
+                  CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
+                  if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
+                    System.exit(1);
+                  }
+
+                  CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
+                  if (!status.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : stream: "+ streamName+" delete failed");
+                    System.exit(1);
+                  }
+
+                  if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+                    System.out.println("ERROR : stream: "+ streamName+" recreation failed");
+                    System.exit(1);
+
+                  }
+
+              } 
+
             }
 
-            factory = ClientFactory.withScope("Scope", new URI(controllerUri));
-        } catch (URISyntaxException e) {
+            factory = new ClientFactoryImpl(scopeName, controller);  
+
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
 
-
-        // Initialize executor
         if (fork) {
            fjexecutor = new ForkJoinPool();
         } else {
            executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
         }
-
-        bgexecutor = Executors.newScheduledThreadPool(10);
 
         if ( !onlyWrite ) {
             ReaderGroupManager readerGroupManager = null;
@@ -247,7 +333,7 @@ public class PravegaPerfTest {
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
         options.addOption("fork", true, "Use fork join framework for parallel threads");
-
+        options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
 
         options.addOption("help", false, "Help message");
 
@@ -326,12 +412,18 @@ public class PravegaPerfTest {
                 if (commandline.hasOption("fork")) {
                     fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
                 }
+
+                if (commandline.hasOption("recreate")) {
+                    recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+                }
+
             }
         } catch (Exception nfe) {
             System.out.println("Invalid arguments. Starting with default values");
             nfe.printStackTrace();
         }
     }
+
 
     /**
      * A Sensor simulator class that generates dummy value as temperature measurement and ingests to specified stream.
