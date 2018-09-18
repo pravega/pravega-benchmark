@@ -140,13 +140,6 @@ public class PravegaPerfTest {
 
 
             if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
-               /*
-               if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
-                   System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
-                   System.exit(1);
-               } 
-               */
-
 
               StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
          
@@ -155,6 +148,17 @@ public class PravegaPerfTest {
 
               if (!recreate ) {
                   System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
+
+                  /*
+                   * Note that the Upgrade stream API does not change the number of segments; 
+                   * but it indicates with new number of segments.
+                   * after calling update stream , manual scaling is required
+                   */   
+                  if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
+                      System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
+                      System.exit(1);
+                  }
+
                   final double keyRangeChunk = 1.0 / segmentCount;
                   final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
                                                                  .boxed()
