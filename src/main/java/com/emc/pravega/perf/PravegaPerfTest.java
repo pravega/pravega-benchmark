@@ -17,6 +17,7 @@
  */
 package com.emc.pravega.perf;
 
+import io.pravega.client.ClientConfig;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.admin.ReaderGroupManager;
 import io.pravega.client.admin.StreamManager;
@@ -33,6 +34,12 @@ import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.impl.JavaSerializer;
+import io.pravega.client.stream.impl.ControllerImpl;
+import io.pravega.client.stream.impl.ControllerImplConfig;
+import io.pravega.client.stream.impl.ClientFactoryImpl;
+import io.pravega.client.stream.impl.StreamImpl;
+import io.pravega.client.stream.impl.StreamSegments;
+import io.pravega.client.segment.impl.Segment;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import lombok.Cleanup;
@@ -42,7 +49,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.CountDownLatch;
@@ -51,9 +57,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
-
-
+import java.util.stream.Collectors;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.TreeMap;
+import java.util.stream.IntStream;
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.AbstractMap.SimpleImmutableEntry;
 
 
 /**
@@ -67,49 +81,147 @@ public class PravegaPerfTest {
     private static String controllerUri = "tcp://localhost:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
+    private static String scopeName = StartLocalService.SCOPE;
     private static ClientFactory factory = null;
     private static boolean onlyWrite = true;
     private static boolean blocking = false;
+    private static boolean recreate = false;
+    private static boolean fork = true;
     // How many producers should we run concurrently
     private static int producerCount = 20;
     private static int consumerCount = 20;
+    private static int segmentCount = 20;
     // How many events each producer has to produce per seconds
     private static int eventsPerSec = 40;
     // How long it needs to run
     private static int runtimeSec = 10;
     // Should producers use Transaction or not
     private static boolean isTransaction = false;
-    private static int reportingInterval = 200;
+    /*
+     * recommended value for reporting interval ; 
+     * its better to keep 1000ms(1 second) to align with eventspersec 
+     */
+    private static int reportingInterval = 1000;
     private static ScheduledExecutorService executor;
+    private static ScheduledExecutorService bgexecutor;
+    private static ForkJoinPool  fjexecutor;
     private static CountDownLatch latch;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
+    private static ControllerImpl controller = null;
+    private static int timeout = 10;
+
 
     public static void main(String[] args) throws Exception {
+
+        final long StartTime = System.currentTimeMillis();
 
         parseCmdLine(args);
 
         // Initialize executor
-        executor = Executors.newScheduledThreadPool(producerCount + consumerCount + 10);
+        bgexecutor = Executors.newScheduledThreadPool(10);
+
 
         try {
             @Cleanup StreamManager streamManager = null;
-            streamManager = StreamManager.create(new URI(controllerUri));
-            streamManager.createScope("Scope");
+            StreamConfiguration streamconfig = null;
+            URI uri= new URI(controllerUri);
+            streamManager = StreamManager.create(uri);
+            streamManager.createScope(scopeName);
+            streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
+                            .scalingPolicy(ScalingPolicy.fixed(segmentCount))
+                            .build();
+           
+            controller = new ControllerImpl(ControllerImplConfig.builder()
+                                    .clientConfig(ClientConfig.builder().controllerURI(uri).build())
+                                    .maxBackoffMillis(5000).build(),
+                                     bgexecutor);
 
-            streamManager.createStream("Scope", streamName,
-                    StreamConfiguration.builder().scope("Scope").streamName(streamName)
-                            .scalingPolicy(ScalingPolicy.fixed(producerCount))
-                            .build());
 
-            factory = ClientFactory.withScope("Scope", new URI(controllerUri));
-        } catch (URISyntaxException e) {
+            if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+
+              StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
+         
+              final int nseg = segments.getSegments().size();
+              System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
+
+              if (!recreate ) {
+                  System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
+
+                  /*
+                   * Note that the Upgrade stream API does not change the number of segments; 
+                   * but it indicates with new number of segments.
+                   * after calling update stream , manual scaling is required
+                   */   
+                  if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
+                      System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
+                      System.exit(1);
+                  }
+
+                  final double keyRangeChunk = 1.0 / segmentCount;
+                  final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
+                                                                 .boxed()
+                                                                 .collect(Collectors.toMap(x -> x * keyRangeChunk ,  x->(x + 1) * keyRangeChunk)); 
+                  final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
+
+                  /*      
+                  System.out.println("The key ranges are");
+                  Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+
+                  map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+                  System.out.println("segments list:"+segmentList);
+                  */
+                  CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
+                                                                       segmentList,
+                                                                       keyRanges,
+                                                                       bgexecutor).getFuture();
+
+              
+                  if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
+                     System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                     System.exit(1);
+                  }
+
+                  System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
+                         .get().getSegments().size());
+         
+              } else {
+                  System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
+                  CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
+                  if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
+                    System.exit(1);
+                  }
+
+                  CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
+                  if (!status.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : stream: "+ streamName+" delete failed");
+                    System.exit(1);
+                  }
+
+                  if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+                    System.out.println("ERROR : stream: "+ streamName+" recreation failed");
+                    System.exit(1);
+
+                  }
+
+              } 
+
+            }
+
+            factory = new ClientFactoryImpl(scopeName, controller);  
+
+        } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
         }
 
-
+        if (fork) {
+           fjexecutor = new ForkJoinPool();
+        } else {
+           executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
+        }
 
         if ( !onlyWrite ) {
             ReaderGroupManager readerGroupManager = null;
@@ -129,13 +241,12 @@ public class PravegaPerfTest {
                 ReaderWorker reader = new ReaderWorker(i);
                 if(i == 0)
                     reader.cleanupEvents();
-                executor.execute(reader);
+                execute(reader);
             }
             if(consumerCount == 0)
-            readerGroup.initiateCheckpoint(streamName, executor);
+               readerGroup.initiateCheckpoint(streamName, bgexecutor);
         }
-        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
-                messageSize);
+        
         WriterWorker workers[] = new WriterWorker[producerCount];
         /* Create producerCount number of threads to simulate sensors. */
         latch = new CountDownLatch(producerCount);
@@ -144,34 +255,68 @@ public class PravegaPerfTest {
 
             if ( isTransaction ) {
                 workers[i] = new TransactionWriterWorker(i, eventsPerSec,
-                        runtimeSec,
-                        isTransaction, isRandomKey, transactionPerCommit, factory);
+                        runtimeSec,isTransaction, isRandomKey, 
+                        transactionPerCommit, StartTime, factory);
             } else {
                 workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, isRandomKey, factory);
+                        isTransaction, isRandomKey, StartTime, factory);
             }
-            executor.execute(workers[i]);
+         } 
 
+        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
+                messageSize);          
+
+
+         for (int i = 0; i < producerCount; i++) {
+             execute(workers[i]);
         }
 
-       latch.await();
+        latch.await();
+        long endTime = System.currentTimeMillis(); 
 
         System.out.println("\nFinished all producers");
         if(producerCount != 0) {
             produceStats.printAll();
-            produceStats.printTotal();
+            produceStats.printTotal(endTime);
         }
 
-        executor.shutdown();
+        shutdown();
         // Wait until all threads are finished.
-        executor.awaitTermination(1, TimeUnit.HOURS);
+        awaitTermination(1, TimeUnit.HOURS);
 
 
         if ( !onlyWrite && consumerCount != 0 ) {
-            consumeStats.printTotal();
+            consumeStats.printTotal(System.currentTimeMillis());
         }
         System.exit(0);
     }
+
+   
+    private static void execute(Runnable task ) throws Exception {
+        if (fork) {
+            fjexecutor.execute(task);
+        } else  {
+            executor.execute(task);
+       }
+    }
+
+
+    private static void shutdown() throws Exception {
+        if (fork) {
+           fjexecutor.shutdown();
+        } else  {
+           executor.shutdown();
+       }
+    }
+       
+    private static boolean awaitTermination (long timeout,
+                       TimeUnit unit) throws InterruptedException {
+        if (fork) {
+          return  fjexecutor.awaitTermination(timeout,unit);  
+       } else {
+          return  executor.awaitTermination(timeout,unit); 
+       }    
+    } 
 
     private static void parseCmdLine(String[] args) {
         // create Options object
@@ -183,13 +328,16 @@ public class PravegaPerfTest {
         options.addOption("eventspersec", true, "number events per sec");
         options.addOption("runtime", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
-        options.addOption("size", true, "Size of each message");
+        options.addOption("size", true, "Size of each message (record)");
         options.addOption("stream", true, "Stream name");
         options.addOption("writeonly", true, "Just produce vs read after produce");
         options.addOption("blocking", true, "Block for each ack");
-        options.addOption("reporting", true, "Reporting internval");
+        options.addOption("reporting", true, "Reporting internval in milliseconds, default set to 1000ms (1 sec)");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
+        options.addOption("segments", true, "Number of segments");
+        options.addOption("fork", true, "Use fork join framework for parallel threads");
+        options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
 
         options.addOption("help", false, "Help message");
 
@@ -259,12 +407,27 @@ public class PravegaPerfTest {
                     runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
                 }
 
+                if (commandline.hasOption("segments")) {
+                    segmentCount = Integer.parseInt(commandline.getOptionValue("segments"));
+                } else {
+                    segmentCount = producerCount; 
+                }
+
+                if (commandline.hasOption("fork")) {
+                    fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
+                }
+
+                if (commandline.hasOption("recreate")) {
+                    recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+                }
+
             }
         } catch (Exception nfe) {
             System.out.println("Invalid arguments. Starting with default values");
             nfe.printStackTrace();
         }
     }
+
 
     /**
      * A Sensor simulator class that generates dummy value as temperature measurement and ingests to specified stream.
@@ -277,13 +440,15 @@ public class PravegaPerfTest {
         private final int eventsPerSec;
         private final int secondsToRun;
         private final boolean isTransaction;
+	private final long StartTime;
 
         WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction, boolean isRandomKey,
-                     ClientFactory factory) {
+                     long start, ClientFactory factory) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
             this.isTransaction = isTransaction;
+            this.StartTime = start;
             this.producer = factory.createEventWriter(streamName,
                     new JavaSerializer<String>(),
                     EventWriterConfig.builder().build());
@@ -305,60 +470,58 @@ public class PravegaPerfTest {
         void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
             CompletableFuture retFuture = null;
-            for (int i = 0; i < secondsToRun; i++) {
-                int currentEventsPerSec = 0;
+            final long Mseconds = secondsToRun*1000;
+            long DiffTime = Mseconds;
+
+            do {
 
                 long loopStartTime = System.currentTimeMillis();
-                while ( currentEventsPerSec < eventsPerSec) {
-                    currentEventsPerSec++;
+                for (int i = 0; i < eventsPerSec; i++)  {
 
                     // Construct event payload
                     String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
                     String payload = String.format("%-" + messageSize + "s", val);
+                    String key;
+                    if (isRandomKey) {
+                        key = Integer.toString(producerId + new Random().nextInt());
+                    } else {
+                        key = Integer.toString(producerId);
+                    }
+                   
                     // event ingestion
-                    long now = System.currentTimeMillis();
-                    retFuture = produceStats.runAndRecordTime(() -> {
-                                String key;
-                                if (isRandomKey) {
-                                    key = Integer.toString(producerId + new Random().nextInt());
-                                } else {
-                                    key = Integer.toString(producerId);
-                                }
+                    retFuture = produceStats.writeAndRecordTime(() -> {
                                 return fn.apply(key, payload);
                             },
-                            now,
-                            payload.length(), executor);
-                    //If it is a blocking call, wait for the ack
-                    if ( blocking ) {
-                        try {
-                            retFuture.get();
-                        } catch (InterruptedException  | ExecutionException e) {
-                            e.printStackTrace();
-                        }
-                    }
+                            payload.length(), blocking);
 
                 }
+
                 long timeSpent = System.currentTimeMillis() - loopStartTime;
                 // wait for next event
                 try {
-                    //There is no need for sleep for blocking calls.
-                    if ( !blocking ) {
-                        if ( timeSpent < 1000) {
-                            Thread.sleep(1000 - timeSpent);
-                        }
-                    }
+                     if (timeSpent < 1000) {
+                          Thread.sleep(1000 - timeSpent);
+                     }
                 } catch (InterruptedException e) {
                     // log exception
+                    e.printStackTrace();
                     System.exit(1);
                 }
-            }
+
+                DiffTime = System.currentTimeMillis() - StartTime; 
+ 
+            } while(DiffTime < Mseconds);
+
             producer.flush();
-            //producer.close();
-            try {
-                //Wait for the last packet to get acked
-                retFuture.get();
-            } catch (InterruptedException | ExecutionException e ) {
-                e.printStackTrace();
+            // producer.close();
+            
+            if (!blocking) {
+                try {
+                   //Wait for the last packet to get acked
+                   retFuture.get();
+                } catch (InterruptedException | ExecutionException e ) {
+                   e.printStackTrace();
+                }
             }
         }
 
@@ -377,8 +540,8 @@ public class PravegaPerfTest {
         private int eventCount = 0;
 
         TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, boolean isRandomKey, int transactionsPerCommit, ClientFactory factory) {
-            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, factory);
+                isTransaction, boolean isRandomKey, int transactionsPerCommit, long start, ClientFactory factory) {
+            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, start, factory);
             this.transactionsPerCommit = transactionsPerCommit;
             transaction = producer.beginTxn();
         }
@@ -432,10 +595,10 @@ public class PravegaPerfTest {
                     if(result.getEvent()!=null) {
                         drainStats.runAndRecordTime(() -> {
                             return null;
-                        }, startTime, result.getEvent().length(), executor);
+                        }, startTime, result.getEvent().length());
                     } else break;
                 }while (true);
-                drainStats.printTotal();
+                drainStats.printTotal(System.currentTimeMillis());
             } catch (ReinitializationRequiredException e) {
                 e.printStackTrace();
             }
@@ -456,7 +619,7 @@ public class PravegaPerfTest {
                         counter = totalEvents.decrementAndGet();
                          consumeStats.runAndRecordTime(() -> {
                             return null;
-                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length(), executor);
+                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
 
                     }while (counter > 0);
                 } catch (ReinitializationRequiredException e) {
