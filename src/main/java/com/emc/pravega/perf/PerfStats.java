@@ -21,6 +21,7 @@ package com.emc.pravega.perf;
 
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
@@ -31,9 +32,8 @@ class PerfStats {
     private long windowStartTime;
     private long start;
     private long windowStart;
-    private double[] latencies;
+    private ArrayList<Double> latencies;
     private int iteration;
-    private int index;
     private long count;
     private long bytes;
     private double maxLatency;
@@ -42,22 +42,19 @@ class PerfStats {
     private long windowBytes;
     private long reportingInterval;
 
-    public PerfStats(String action, long numRecords, int reportingInterval, int messageSize) {
-        if ( numRecords != 0 ) {
-            this.action = action;
-            this.start = System.currentTimeMillis();
-            this.windowStartTime = System.currentTimeMillis();
-            this.windowStart = 0;
-            this.index = 0;
-            this.iteration = 0;
-            this.latencies = new double[(int) (numRecords / reportingInterval)];
-            this.maxLatency = 0;
-            this.totalLatency = 0;
-            this.windowCount = 0;
-            this.windowBytes = 0;
-            this.reportingInterval = reportingInterval;
-            this.messageSize = messageSize;
-        }
+    public PerfStats(String action, int reportingInterval, int messageSize) {
+           this.action = action;
+           this.start = System.currentTimeMillis();
+           this.windowStartTime = System.currentTimeMillis();
+           this.windowStart = 0;
+           this.iteration = 0;
+           this.latencies = new  ArrayList<Double>();
+           this.maxLatency = 0;
+           this.totalLatency = 0;
+           this.windowCount = 0;
+           this.windowBytes = 0;
+           this.reportingInterval = reportingInterval;
+           this.messageSize = messageSize;
     }
 
     public synchronized void record(int bytes, long startTime, long endTime) {
@@ -79,9 +76,8 @@ class PerfStats {
 
         this.bytes += this.windowBytes;
         this.totalLatency += latency; 
-        this.maxLatency = Math.max(this.maxLatency, latency);  
-        this.latencies[index] = latency;
-        this.index++;
+        this.maxLatency = Math.max(this.maxLatency, latency); 
+        this.latencies.add(latency);
         this.count++;
         
         System.out.printf("%8d records %s, %9.1f records/sec, %9.3f MB/sec, %7.4f ms avg latency.\n",
@@ -110,8 +106,8 @@ class PerfStats {
         double mbPerSec = 1000.0 * this.bytes / (double) elapsed / (1024.0 * 1024.0);
         //double[] percs = percentiles(this.latencies, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(
-                "%d records sent, %.3f records/sec, %d bytes record size, %.3f MB/sec, %.4f ms avg latency, %.4f ms max latency\n", 
-                iteration, recsPerSec,  messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency);
+                "%d records %s, %.3f records/sec, %d bytes record size, %.3f MB/sec, %.4f ms avg latency, %.4f ms max latency\n", 
+                iteration, action, recsPerSec,  messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency);
         /*  
         System.out.printf("latencies percentiles:  %.4f ms 50th, %.4f ms 95th, %.4f ms 99th, %.4f ms 99.9th.\n",
                            percs[0], percs[1], percs[2], percs[3]);
