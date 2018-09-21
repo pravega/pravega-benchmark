@@ -37,6 +37,7 @@ import io.pravega.client.stream.impl.JavaSerializer;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
+import io.pravega.client.stream.Stream;
 import io.pravega.client.stream.impl.StreamImpl;
 import io.pravega.client.stream.impl.StreamSegments;
 import io.pravega.client.segment.impl.Segment;
@@ -83,14 +84,13 @@ public class PravegaPerfTest {
     private static String streamName = StartLocalService.STREAM_NAME;
     private static String scopeName = StartLocalService.SCOPE;
     private static ClientFactory factory = null;
-    private static boolean onlyWrite = true;
     private static boolean blocking = false;
     private static boolean recreate = false;
     private static boolean fork = true;
     // How many producers should we run concurrently
-    private static int producerCount = 20;
-    private static int consumerCount = 20;
-    private static int segmentCount = 20;
+    private static int producerCount = 0;
+    private static int consumerCount = 0;
+    private static int segmentCount = 0;
     // How many events each producer has to produce per seconds
     private static int eventsPerSec = 40;
     // How long it needs to run
@@ -111,13 +111,25 @@ public class PravegaPerfTest {
     private static int transactionPerCommit = 1;
     private static ControllerImpl controller = null;
     private static int timeout = 10;
+    private static ReaderGroupManager readerGroupManager = null;
 
 
     public static void main(String[] args) throws Exception {
 
         final long StartTime = System.currentTimeMillis();
+        List <ReaderWorker> readers = null;
+        List <WriterWorker> workers = null;
+        ReaderGroup readerGroup=null;
+          
 
         parseCmdLine(args);
+
+        if (producerCount == 0 && consumerCount == 0) {
+           System.out.println("Error: Must specify the number of producers or Consumers");
+           System.exit(1);
+        }
+
+        final String readergrp =streamName;
 
         // Initialize executor
         bgexecutor = Executors.newScheduledThreadPool(10);
@@ -129,86 +141,96 @@ public class PravegaPerfTest {
             URI uri= new URI(controllerUri);
             streamManager = StreamManager.create(uri);
             streamManager.createScope(scopeName);
-            streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
-                            .scalingPolicy(ScalingPolicy.fixed(segmentCount))
-                            .build();
            
             controller = new ControllerImpl(ControllerImplConfig.builder()
                                     .clientConfig(ClientConfig.builder().controllerURI(uri).build())
                                     .maxBackoffMillis(5000).build(),
                                      bgexecutor);
 
+            if (producerCount > 0 ) {
+                streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
+                                                  .scalingPolicy(ScalingPolicy.fixed(segmentCount))
+                                                  .build();
 
-            if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+                if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
 
-              StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
+                    StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
          
-              final int nseg = segments.getSegments().size();
-              System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
+                    final int nseg = segments.getSegments().size();
+                    System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
 
-              if (!recreate ) {
-                  System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
+                   if (!recreate ) {
+                      if (nseg != segmentCount) {
+                          System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
 
-                  /*
-                   * Note that the Upgrade stream API does not change the number of segments; 
-                   * but it indicates with new number of segments.
-                   * after calling update stream , manual scaling is required
-                   */   
-                  if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
-                      System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
-                      System.exit(1);
-                  }
+                         /*
+                          * Note that the Upgrade stream API does not change the number of segments; 
+                          * but it indicates with new number of segments.
+                          * after calling update stream , manual scaling is required
+                          */   
+                          if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
+                              System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
+                              System.exit(1);
+                          }
 
-                  final double keyRangeChunk = 1.0 / segmentCount;
-                  final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
+                          final double keyRangeChunk = 1.0 / segmentCount;
+                          final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
                                                                  .boxed()
                                                                  .collect(Collectors.toMap(x -> x * keyRangeChunk ,  x->(x + 1) * keyRangeChunk)); 
-                  final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
+                          final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
 
-                  /*      
-                  System.out.println("The key ranges are");
-                  Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+                          /*      
+                          System.out.println("The key ranges are");
+                          Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
 
-                  map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
-                  System.out.println("segments list:"+segmentList);
-                  */
-                  CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
+                          map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
+                          System.out.println("segments list:"+segmentList);
+                          */
+                          CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
                                                                        segmentList,
                                                                        keyRanges,
                                                                        bgexecutor).getFuture();
 
               
-                  if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
-                     System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
-                     System.exit(1);
-                  }
+                          if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
+                              System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
+                              System.exit(1);
+                          }
 
-                  System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
-                         .get().getSegments().size());
+                          System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
+                                                                  .get().getSegments().size());
+                       }
          
-              } else {
-                  System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
-                  CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
-                  if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
-                    System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
-                    System.exit(1);
+                  } else {
+                       System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
+                       CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
+                       if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
+                           System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
+                           System.exit(1);
+                       }
+
+                       CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
+                       if (!status.get(timeout, TimeUnit.SECONDS)) {
+                          System.out.println("ERROR : stream: "+ streamName+" delete failed");
+                          System.exit(1);
+                       }
+
+                       if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
+                          System.out.println("ERROR : stream: "+ streamName+" recreation failed");
+                          System.exit(1);
+                       }   
+
                   }
-
-                  CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
-                  if (!status.get(timeout, TimeUnit.SECONDS)) {
-                    System.out.println("ERROR : stream: "+ streamName+" delete failed");
-                    System.exit(1);
-                  }
-
-                  if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
-                    System.out.println("ERROR : stream: "+ streamName+" recreation failed");
-                    System.exit(1);
-
-                  }
-
-              } 
-
+                } 
             }
+
+            if ( consumerCount > 0 ) {
+                readerGroupManager = ReaderGroupManager.withScope(scopeName, ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
+                readerGroupManager.createReaderGroup(readergrp,
+                                   ReaderGroupConfig.builder().stream(Stream.of(scopeName, streamName)).build());
+                readerGroup = readerGroupManager.getReaderGroup(readergrp);
+            }     
+
 
             factory = new ClientFactoryImpl(scopeName, controller);  
 
@@ -223,76 +245,91 @@ public class PravegaPerfTest {
            executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
         }
 
-        if ( !onlyWrite ) {
-            ReaderGroupManager readerGroupManager = null;
-            try {
-                readerGroupManager = ReaderGroupManager.withScope("Scope", new URI(controllerUri));
-            } catch (URISyntaxException e1) {
-                e1.printStackTrace();
-            }
-            readerGroupManager.createReaderGroup(streamName,
-                    ReaderGroupConfig.builder().build());
-            ReaderGroup readerGroup = readerGroupManager.getReaderGroup(streamName);
-            consumeStats = new PerfStats("Reading", consumerCount * eventsPerSec * runtimeSec, reportingInterval,messageSize);
-            drainStats = new PerfStats("Draining", consumerCount * eventsPerSec * runtimeSec, reportingInterval,
-                    messageSize);
-            ReaderWorker.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
-            for(int i=0;i<consumerCount;i++) {
-                ReaderWorker reader = new ReaderWorker(i);
-                if(i == 0)
-                    reader.cleanupEvents();
-                execute(reader);
-            }
-            if(consumerCount == 0)
-               readerGroup.initiateCheckpoint(streamName, bgexecutor);
-        }
-        
-        WriterWorker workers[] = new WriterWorker[producerCount];
+
         /* Create producerCount number of threads to simulate sensors. */
-        latch = new CountDownLatch(producerCount);
-        for (int i = 0; i < producerCount; i++) {
-            //factory = new ClientFactoryImpl("Scope", new URI(controllerUri));
+        latch = new CountDownLatch(producerCount+consumerCount);
 
-            if ( isTransaction ) {
-                workers[i] = new TransactionWriterWorker(i, eventsPerSec,
-                        runtimeSec,isTransaction, isRandomKey, 
-                        transactionPerCommit, StartTime, factory);
-            } else {
-                workers[i] = new WriterWorker(i, eventsPerSec, runtimeSec,
-                        isTransaction, isRandomKey, StartTime, factory);
+        try { 
+
+            if (consumerCount > 0 ) {
+                drainStats = new PerfStats("Draining", reportingInterval, messageSize);
+                ReaderWorker.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
+
+                /* 
+                if(consumerCount == 0)
+                   readerGroup.initiateCheckpoint(streamName, bgexecutor);
+                */
+
+                readers = IntStream.range(0, consumerCount)
+                                   .boxed()
+                                   .map(i -> new ReaderWorker(i, runtimeSec, readergrp,  StartTime, factory)) 
+                                   .collect(Collectors.toList());
+
+                if (producerCount > 0) {
+                    ReaderWorker r = readers.get(0);
+                    r.cleanupEvents();
+                }
+
             }
-         } 
-
-        produceStats = new PerfStats("Writing",producerCount * eventsPerSec * runtimeSec, reportingInterval,
-                messageSize);          
 
 
-         for (int i = 0; i < producerCount; i++) {
-             execute(workers[i]);
+            if ( producerCount > 0) {
+
+               if (isTransaction) { 
+                   workers = IntStream.range(0, producerCount)
+                               .boxed()
+                               .map(i -> new TransactionWriterWorker(i, eventsPerSec,
+                                             runtimeSec,isTransaction, isRandomKey,
+                                             transactionPerCommit, StartTime, factory))
+                               .collect(Collectors.toList());
+               } else {
+
+                   workers = IntStream.range(0, producerCount)
+                               .boxed()
+                               .map(i -> new WriterWorker(i, eventsPerSec, runtimeSec,
+                                             isTransaction, isRandomKey, StartTime, factory))
+                               .collect(Collectors.toList());
+
+              }       
+
+              produceStats = new PerfStats("Writing",reportingInterval, messageSize);          
+              workers.forEach(w-> execute(w));
+           }
+ 
+           if (consumerCount > 0 ) {
+               consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
+               readers.forEach(r->execute(r));
+           }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
         }
+
 
         latch.await();
+        
         long endTime = System.currentTimeMillis(); 
-
+      
         System.out.println("\nFinished all producers");
         if(producerCount != 0) {
             produceStats.printAll();
             produceStats.printTotal(endTime);
         }
 
-        shutdown();
-        // Wait until all threads are finished.
-        awaitTermination(1, TimeUnit.HOURS);
+        if ( consumerCount > 0 ) {
+            consumeStats.printTotal(endTime);
 
-
-        if ( !onlyWrite && consumerCount != 0 ) {
-            consumeStats.printTotal(System.currentTimeMillis());
         }
+
+        shutdown();
+        awaitTermination(runtimeSec, TimeUnit.SECONDS);
+
         System.exit(0);
     }
 
    
-    private static void execute(Runnable task ) throws Exception {
+    private static void execute(Runnable task ) {
         if (fork) {
             fjexecutor.execute(task);
         } else  {
@@ -384,9 +421,6 @@ public class PravegaPerfTest {
                     streamName = commandline.getOptionValue("stream");
                 }
 
-                if (commandline.hasOption("writeonly")) {
-                    onlyWrite = Boolean.parseBoolean(commandline.getOptionValue("writeonly"));
-                }
                 if (commandline.hasOption("blocking")) {
                     blocking = Boolean.parseBoolean(commandline.getOptionValue("blocking"));
                 }
@@ -573,25 +607,27 @@ public class PravegaPerfTest {
        @Setter
         public static AtomicInteger totalEvents;
         private EventStreamReader<String> reader;
+        private final int secondsToRun;
+        private final long StartTime;
         String readerId;
 
 
-        public ReaderWorker(int readerId) {
+        public ReaderWorker(int readerId, int secondsToRun, String readergrp,  long start,  ClientFactory factory) {
             this.readerId = Integer.toString(readerId);
-            ClientFactory clientFactory = ClientFactory.withScope("Scope",
-                    URI.create(controllerUri));
+            this.secondsToRun = secondsToRun; 
+            this.StartTime=start;
 
-            reader = clientFactory.createReader(
-                    this.readerId, streamName, new JavaSerializer<String>(), ReaderConfig.builder().build());
+            reader = factory.createReader(
+                    this.readerId, readergrp, new JavaSerializer<String>(), ReaderConfig.builder().build());
         }
 
         public void cleanupEvents() {
             try {
                 EventRead<String> result;
-                System.out.format("******** Draining events from %s/%s%n", "Scope", streamName);
+                System.out.format("******** Draining events from %s/%s%n", scopeName, streamName);
                 do {
                     long startTime = System.currentTimeMillis();
-                    result = reader.readNextEvent(600);
+                    result = reader.readNextEvent(timeout);
                     if(result.getEvent()!=null) {
                         drainStats.runAndRecordTime(() -> {
                             return null;
@@ -604,29 +640,40 @@ public class PravegaPerfTest {
             }
 
         }
+
+        public void close(){
+             reader.close();
+        }
+
         @Override
         public void run() {
-                System.out.format("******** Reading events from %s/%s%n", "Scope", streamName);
+                System.out.format("******** Reading events from %s/%s%n", scopeName , streamName);
                 EventRead<String> event = null;
+                final long Mseconds = secondsToRun*1000;
+                long DiffTime = Mseconds;
+
                 try {
                     int counter = 0;
                     do {
-                        final EventRead<String> result = reader.readNextEvent(60000);
-                        if(result.getEvent() == null)
+                        final EventRead<String> result = reader.readNextEvent(timeout);
+                        
+                        if(result.getEvent() != null)
                         {
-                            continue;
-                        }
+                           consumeStats.runAndRecordTime(() -> {
+                                        return null;
+                                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
+                        } 
                         counter = totalEvents.decrementAndGet();
-                         consumeStats.runAndRecordTime(() -> {
-                            return null;
-                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
-
-                    }while (counter > 0);
+                        DiffTime = System.currentTimeMillis() - StartTime;   
+                        
+                    }while ((counter > 0) && (DiffTime < Mseconds));
                 } catch (ReinitializationRequiredException e) {
                     e.printStackTrace();
                 }
-                reader.close();
+                close();  
+                latch.countDown();   
         }
+
     }
 
 
