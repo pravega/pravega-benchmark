@@ -127,11 +127,12 @@ class PerfStats {
 
     public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) {
         CompletableFuture  retVal = fn.get();
-        long endTime = System.currentTimeMillis(); 
         if(retVal == null) {
+            final long endTime = System.currentTimeMillis();
             record(length,startTime,  endTime);
         } else {
             retVal = retVal.thenAccept((d) -> {
+                final long endTime = System.currentTimeMillis();
                 record(length,startTime, endTime);
             });
         }
@@ -141,8 +142,8 @@ class PerfStats {
 
     public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length, boolean blocking ) {
         CompletableFuture  retVal=null;
-        long startTime, endTime;
-        startTime = System.currentTimeMillis();
+        final long startTime = System.currentTimeMillis();
+ 
         try {
              retVal = fn.get();
              if (blocking) {
@@ -151,12 +152,13 @@ class PerfStats {
         } catch (Exception e) {
              e.printStackTrace();
         }
-        endTime = System.currentTimeMillis();
         
         if(retVal == null) {
+            final long endTime = System.currentTimeMillis(); 
             record(length, startTime,  endTime);
         } else {
             retVal = retVal.thenAccept((d) -> {
+                final long endTime = System.currentTimeMillis(); 
                 record(length, startTime, endTime);
             });
         }
