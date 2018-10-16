@@ -84,7 +84,6 @@ public class PravegaPerfTest {
     private static String streamName = StartLocalService.STREAM_NAME;
     private static String scopeName = StartLocalService.SCOPE;
     private static ClientFactory factory = null;
-    private static boolean blocking = false;
     private static boolean recreate = false;
     // How many producers should we run concurrently
     private static int producerCount = 0;
@@ -336,7 +335,6 @@ public class PravegaPerfTest {
         options.addOption("size", true, "Size of each message (record)");
         options.addOption("stream", true, "Stream name");
         options.addOption("writeonly", true, "Just produce vs read after produce");
-        options.addOption("blocking", true, "Block for each ack");
         options.addOption("reporting", true, "Reporting internval in milliseconds, default set to 1000ms (1 sec)");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
@@ -386,10 +384,6 @@ public class PravegaPerfTest {
 
                 if (commandline.hasOption("stream")) {
                     streamName = commandline.getOptionValue("stream");
-                }
-
-                if (commandline.hasOption("blocking")) {
-                    blocking = Boolean.parseBoolean(commandline.getOptionValue("blocking"));
                 }
 
                 if (commandline.hasOption("reporting")) {
@@ -467,13 +461,8 @@ public class PravegaPerfTest {
         void runLoop(BiFunction<String, String, CompletableFuture> fn) {
 
             CompletableFuture retFuture = null;
-            final long Mseconds = secondsToRun*1000;
-            long DiffTime = Mseconds;
-
-            String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
-            String payload = String.format("%-" + messageSize + "s", val);
-
-
+            final long mSeconds = secondsToRun*1000;
+            long diffTime = mSeconds;
 
             do {
 
@@ -481,8 +470,8 @@ public class PravegaPerfTest {
                 for (int i = 0; i < eventsPerSec; i++)  {
 
                     // Construct event payload
-                  //  String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
-                  //  String payload = String.format("%-" + messageSize + "s", val);
+                    String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
+                    String payload = String.format("%-" + messageSize + "s", val);
                     String key;
                     if (isRandomKey) {
                         key = Integer.toString(producerId + new Random().nextInt());
@@ -494,7 +483,7 @@ public class PravegaPerfTest {
                     retFuture = produceStats.writeAndRecordTime(() -> {
                                 return fn.apply(key, payload);
                             },
-                            payload.length(), blocking);
+                            payload.length());
 
                 }
 
@@ -510,20 +499,18 @@ public class PravegaPerfTest {
                     System.exit(1);
                 }
 
-                DiffTime = System.currentTimeMillis() - StartTime; 
+                diffTime = System.currentTimeMillis() - StartTime; 
  
-            } while(DiffTime < Mseconds);
+            } while(diffTime < mSeconds);
 
             producer.flush();
             // producer.close();
  
-            if (!blocking) {
-                try {
+            try {
                    //Wait for the last packet to get acked
                    retFuture.get();
-                } catch (InterruptedException | ExecutionException e ) {
+            } catch (InterruptedException | ExecutionException e ) {
                    e.printStackTrace();
-                }
             }
         }
 
@@ -617,8 +604,8 @@ public class PravegaPerfTest {
         public void run() {
                 System.out.format("******** Reading events from %s/%s%n", scopeName , streamName);
                 EventRead<String> event = null;
-                final long Mseconds = secondsToRun*1000;
-                long DiffTime = Mseconds;
+                final long mSeconds = secondsToRun*1000;
+                long diffTime = mSeconds;
 
                 try {
                     int counter = 0;
@@ -632,9 +619,9 @@ public class PravegaPerfTest {
                                         }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
                         } 
                         counter = totalEvents.decrementAndGet();
-                        DiffTime = System.currentTimeMillis() - StartTime;   
+                        diffTime = System.currentTimeMillis() - StartTime;   
                         
-                    }while ((counter > 0) && (DiffTime < Mseconds));
+                    }while ((counter > 0) && (diffTime < mSeconds));
                 } catch (ReinitializationRequiredException e) {
                     e.printStackTrace();
                 }

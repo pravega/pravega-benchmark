@@ -140,18 +140,11 @@ class PerfStats {
 
     }
 
-    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length, boolean blocking ) {
+    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length) {
         CompletableFuture  retVal=null;
         final long startTime = System.currentTimeMillis();
  
-        try {
-             retVal = fn.get();
-             if (blocking) {
-                  retVal.get();
-             }
-        } catch (Exception e) {
-             e.printStackTrace();
-        }
+        retVal = fn.get();
         
         if(retVal == null) {
             final long endTime = System.currentTimeMillis(); 
