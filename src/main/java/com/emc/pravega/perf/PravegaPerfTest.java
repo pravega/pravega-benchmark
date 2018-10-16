@@ -86,7 +86,6 @@ public class PravegaPerfTest {
     private static ClientFactory factory = null;
     private static boolean blocking = false;
     private static boolean recreate = false;
-    private static boolean fork = true;
     // How many producers should we run concurrently
     private static int producerCount = 0;
     private static int consumerCount = 0;
@@ -102,7 +101,6 @@ public class PravegaPerfTest {
      * its better to keep 1000ms(1 second) to align with eventspersec 
      */
     private static int reportingInterval = 1000;
-    private static ScheduledExecutorService executor;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool  fjexecutor;
     private static CountDownLatch latch;
@@ -239,11 +237,7 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
-        if (fork) {
-           fjexecutor = new ForkJoinPool();
-        } else {
-           executor = Executors.newScheduledThreadPool(producerCount + consumerCount);
-        }
+        fjexecutor = new ForkJoinPool();
 
 
         /* Create producerCount number of threads to simulate sensors. */
@@ -293,12 +287,12 @@ public class PravegaPerfTest {
               }       
 
               produceStats = new PerfStats("Writing",reportingInterval, messageSize);          
-              workers.forEach(w-> execute(w));
+              workers.forEach(w->fjexecutor.execute(w));
            }
  
            if (consumerCount > 0 ) {
                consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
-               readers.forEach(r->execute(r));
+               readers.forEach(r->fjexecutor. execute(r));
            }
 
         } catch (Exception e) {
@@ -322,38 +316,12 @@ public class PravegaPerfTest {
 
         }
 
-        shutdown();
-        awaitTermination(runtimeSec, TimeUnit.SECONDS);
+        fjexecutor.shutdown();
+        fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
 
         System.exit(0);
     }
 
-   
-    private static void execute(Runnable task ) {
-        if (fork) {
-            fjexecutor.execute(task);
-        } else  {
-            executor.execute(task);
-       }
-    }
-
-
-    private static void shutdown() throws Exception {
-        if (fork) {
-           fjexecutor.shutdown();
-        } else  {
-           executor.shutdown();
-       }
-    }
-       
-    private static boolean awaitTermination (long timeout,
-                       TimeUnit unit) throws InterruptedException {
-        if (fork) {
-          return  fjexecutor.awaitTermination(timeout,unit);  
-       } else {
-          return  executor.awaitTermination(timeout,unit); 
-       }    
-    } 
 
     private static void parseCmdLine(String[] args) {
         // create Options object
@@ -373,7 +341,6 @@ public class PravegaPerfTest {
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
-        options.addOption("fork", true, "Use fork join framework for parallel threads");
         options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
 
         options.addOption("help", false, "Help message");
@@ -447,10 +414,6 @@ public class PravegaPerfTest {
                     segmentCount = producerCount; 
                 }
 
-                if (commandline.hasOption("fork")) {
-                    fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
-                }
-
                 if (commandline.hasOption("recreate")) {
                     recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
                 }
@@ -507,14 +470,19 @@ public class PravegaPerfTest {
             final long Mseconds = secondsToRun*1000;
             long DiffTime = Mseconds;
 
+            String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
+            String payload = String.format("%-" + messageSize + "s", val);
+
+
+
             do {
 
                 long loopStartTime = System.currentTimeMillis();
                 for (int i = 0; i < eventsPerSec; i++)  {
 
                     // Construct event payload
-                    String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
-                    String payload = String.format("%-" + messageSize + "s", val);
+                  //  String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
+                  //  String payload = String.format("%-" + messageSize + "s", val);
                     String key;
                     if (isRandomKey) {
                         key = Integer.toString(producerId + new Random().nextInt());
@@ -548,7 +516,7 @@ public class PravegaPerfTest {
 
             producer.flush();
             // producer.close();
-            
+ 
             if (!blocking) {
                 try {
                    //Wait for the last packet to get acked
