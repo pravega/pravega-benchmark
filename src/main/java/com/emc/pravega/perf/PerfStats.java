@@ -125,7 +125,7 @@ class PerfStats {
         return values;
     }
 
-    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) {
+    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) throws Exception {
         CompletableFuture  retVal = fn.get();
         if(retVal == null) {
             final long endTime = System.currentTimeMillis();
@@ -140,7 +140,7 @@ class PerfStats {
 
     }
 
-    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length) {
+    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length) throws Exception {
         CompletableFuture  retVal=null;
         final long startTime = System.currentTimeMillis();
  

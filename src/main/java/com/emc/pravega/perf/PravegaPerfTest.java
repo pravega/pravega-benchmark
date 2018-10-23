@@ -52,7 +52,7 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable; 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -78,46 +79,38 @@ import java.util.AbstractMap.SimpleImmutableEntry;
  */
 public class PravegaPerfTest {
 
-    private static PerfStats produceStats, consumeStats, drainStats;
     private static String controllerUri = "tcp://localhost:9090";
     private static int messageSize = 100;
     private static String streamName = StartLocalService.STREAM_NAME;
     private static String scopeName = StartLocalService.SCOPE;
-    private static ClientFactory factory = null;
     private static boolean recreate = false;
-    // How many producers should we run concurrently
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
-    // How many events each producer has to produce per seconds
     private static int eventsPerSec = 40;
-    // How long it needs to run
     private static int runtimeSec = 10;
-    // Should producers use Transaction or not
     private static boolean isTransaction = false;
-    /*
-     * recommended value for reporting interval ; 
-     * its better to keep 1000ms(1 second) to align with eventspersec 
-     */
     private static int reportingInterval = 1000;
-    private static ScheduledExecutorService bgexecutor;
-    private static ForkJoinPool  fjexecutor;
-    private static CountDownLatch latch;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
-    private static ControllerImpl controller = null;
-    private static int timeout = 10;
-    private static ReaderGroupManager readerGroupManager = null;
 
 
     public static void main(String[] args) throws Exception {
 
         final long StartTime = System.currentTimeMillis();
-        List <ReaderWorker> readers = null;
-        List <WriterWorker> workers = null;
+        long endTime; 
         ReaderGroup readerGroup=null;
-          
+        final int timeout=10;
+        final ClientFactory factory;
+        ControllerImpl controller = null;
+        ScheduledExecutorService bgexecutor;
+        ForkJoinPool  fjexecutor;
+        final PerfStats produceStats, consumeStats, drainStats;
+        final List <Callable<Void>> readers;
+        final List <Callable<Void>> writers;
+
+
 
         parseCmdLine(args);
 
@@ -126,198 +119,117 @@ public class PravegaPerfTest {
            System.exit(1);
         }
 
-        final String readergrp =streamName;
-
-        // Initialize executor
         bgexecutor = Executors.newScheduledThreadPool(10);
-
-
+        fjexecutor = new ForkJoinPool();
+   
+ 
         try {
-            @Cleanup StreamManager streamManager = null;
-            StreamConfiguration streamconfig = null;
-            URI uri= new URI(controllerUri);
-            streamManager = StreamManager.create(uri);
-            streamManager.createScope(scopeName);
-           
+
             controller = new ControllerImpl(ControllerImplConfig.builder()
-                                    .clientConfig(ClientConfig.builder().controllerURI(uri).build())
+                                    .clientConfig(ClientConfig.builder()
+                                    .controllerURI(new URI(controllerUri)).build())
                                     .maxBackoffMillis(5000).build(),
                                      bgexecutor);
+               
+            StreamHandler  streamHandle =  new StreamHandler(scopeName, streamName, controllerUri,
+                                                             segmentCount, timeout, controller,
+                                                             bgexecutor);
 
-            if (producerCount > 0 ) {
-                streamconfig = StreamConfiguration.builder().scope(scopeName).streamName(streamName)
-                                                  .scalingPolicy(ScalingPolicy.fixed(segmentCount))
-                                                  .build();
-
-                if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
-
-                    StreamSegments segments = controller.getCurrentSegments(scopeName, streamName).join();
-         
-                    final int nseg = segments.getSegments().size();
-                    System.out.println("Current segments of the stream: "+streamName+ " = " + nseg);  
-
-                   if (!recreate ) {
-                      if (nseg != segmentCount) {
-                          System.out.println("The stream: " + streamName + " will be manually scaling to "+ segmentCount+ " segments");
-
-                         /*
-                          * Note that the Upgrade stream API does not change the number of segments; 
-                          * but it indicates with new number of segments.
-                          * after calling update stream , manual scaling is required
-                          */   
-                          if (!streamManager.updateStream(scopeName, streamName,streamconfig)) {
-                              System.out.println("Could not able to update the stream: "+streamName+ " try with another stream Name");
-                              System.exit(1);
-                          }
-
-                          final double keyRangeChunk = 1.0 / segmentCount;
-                          final Map<Double, Double> keyRanges = IntStream.range(0, segmentCount)
-                                                                 .boxed()
-                                                                 .collect(Collectors.toMap(x -> x * keyRangeChunk ,  x->(x + 1) * keyRangeChunk)); 
-                          final List<Long> segmentList = segments.getSegments().stream().map(Segment::getSegmentId).collect(Collectors.toList());
-
-                          /*      
-                          System.out.println("The key ranges are");
-                          Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
-
-                          map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));               
-                          System.out.println("segments list:"+segmentList);
-                          */
-                          CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scopeName,streamName),
-                                                                       segmentList,
-                                                                       keyRanges,
-                                                                       bgexecutor).getFuture();
-
-              
-                          if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
-                              System.out.println("ERROR : Scale operation on stream "+ streamName+" did not complete");
-                              System.exit(1);
-                          }
-
-                          System.out.println("Number of Segments after manual scale: "+controller.getCurrentSegments(scopeName, streamName)
-                                                                  .get().getSegments().size());
-                       }
-         
-                  } else {
-                       System.out.println("Sealing and Deleteing the stream : "+streamName+" and then recreating the same");
-                       CompletableFuture<Boolean> sealStatus =  controller.sealStream(scopeName, streamName);
-                       if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
-                           System.out.println("ERROR : Segment sealing operation on stream "+ streamName+" did not complete");
-                           System.exit(1);
-                       }
-
-                       CompletableFuture<Boolean> status =  controller.deleteStream(scopeName, streamName);
-                       if (!status.get(timeout, TimeUnit.SECONDS)) {
-                          System.out.println("ERROR : stream: "+ streamName+" delete failed");
-                          System.exit(1);
-                       }
-
-                       if (!streamManager.createStream(scopeName, streamName,streamconfig)) {
-                          System.out.println("ERROR : stream: "+ streamName+" recreation failed");
-                          System.exit(1);
-                       }   
-
-                  }
-                } 
+            if (producerCount > 0 &&  !streamHandle.create()) {
+               if (recreate) {
+                   if (!streamHandle.recreate()) {
+                        throw new Exception("Stream Recreation failed");
+                   }     
+               } else if (!streamHandle.scale()){
+                        throw new Exception("Stream Scaleing failed");
+               }   
             }
 
-            if ( consumerCount > 0 ) {
-                readerGroupManager = ReaderGroupManager.withScope(scopeName, ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
-                readerGroupManager.createReaderGroup(readergrp,
-                                   ReaderGroupConfig.builder().stream(Stream.of(scopeName, streamName)).build());
-                readerGroup = readerGroupManager.getReaderGroup(readergrp);
-            }     
+            if (consumerCount > 0 )
+               readerGroup = streamHandle.createReaderGroup();      
+            factory = new ClientFactoryImpl(scopeName, controller);
 
-
-            factory = new ClientFactoryImpl(scopeName, controller);  
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
-
-        fjexecutor = new ForkJoinPool();
-
-
-        /* Create producerCount number of threads to simulate sensors. */
-        latch = new CountDownLatch(producerCount+consumerCount);
-
-        try { 
 
             if (consumerCount > 0 ) {
-                drainStats = new PerfStats("Draining", reportingInterval, messageSize);
-                ReaderWorker.setTotalEvents(new AtomicInteger(consumerCount * eventsPerSec * runtimeSec));
+               drainStats = new PerfStats("Draining", reportingInterval, messageSize);
+               consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
+               ReaderWorker.totalEvents = new AtomicInteger(consumerCount * eventsPerSec * runtimeSec);
 
-                /* 
-                if(consumerCount == 0)
-                   readerGroup.initiateCheckpoint(streamName, bgexecutor);
-                */
 
-                readers = IntStream.range(0, consumerCount)
-                                   .boxed()
-                                   .map(i -> new ReaderWorker(i, runtimeSec, readergrp,  StartTime, factory)) 
-                                   .collect(Collectors.toList());
+               readers = IntStream.range(0, consumerCount)
+                                  .boxed()
+                                  .map(i ->  new ReaderWorker(i, runtimeSec,
+                                                             StartTime, factory,
+                                                             consumeStats, streamName, timeout))
+                                  .collect(Collectors.toList());
 
-                if (producerCount > 0) {
-                    ReaderWorker r = readers.get(0);
-                    r.cleanupEvents();
-                }
-
+               if (producerCount > 0) {
+                   ReaderWorker  r =  (ReaderWorker) readers.get(0);
+                   r.cleanupEvents(drainStats);
+               }
+            } else {
+              readers = null;
+              drainStats =null;
+              consumeStats = null;
             }
 
 
             if ( producerCount > 0) {
 
+               produceStats = new PerfStats("Writing",reportingInterval, messageSize);
                if (isTransaction) { 
-                   workers = IntStream.range(0, producerCount)
-                               .boxed()
-                               .map(i -> new TransactionWriterWorker(i, eventsPerSec,
-                                             runtimeSec,isTransaction, isRandomKey,
-                                             transactionPerCommit, StartTime, factory))
-                               .collect(Collectors.toList());
+
+                   writers = IntStream.range(0, producerCount)
+                              .boxed()
+                              .map(i -> new TransactionWriterWorker(i, eventsPerSec,
+                                             runtimeSec, isRandomKey,
+                                             messageSize, StartTime,
+                                             factory, produceStats,
+                                             streamName, transactionPerCommit))
+                              .collect(Collectors.toList());
+
                } else {
 
-                   workers = IntStream.range(0, producerCount)
-                               .boxed()
-                               .map(i -> new WriterWorker(i, eventsPerSec, runtimeSec,
-                                             isTransaction, isRandomKey, StartTime, factory))
-                               .collect(Collectors.toList());
-
+                   writers = IntStream.range(0, producerCount)
+                              .boxed()
+                              .map(i -> new WriterWorker(i, eventsPerSec,
+                                             runtimeSec, isRandomKey,
+                                             messageSize, StartTime,
+                                             factory, produceStats,
+                                             streamName))
+                              .collect(Collectors.toList());
               }       
 
-              produceStats = new PerfStats("Writing",reportingInterval, messageSize);          
-              workers.forEach(w->fjexecutor.execute(w));
+           } else {
+             writers = null;
+             produceStats = null;
+           } 
+
+
+           final List<Callable<Void>> workers = new ArrayList() {{
+                                              if (readers != null)
+			                          addAll(readers);
+                                               if (writers != null)
+			                          addAll(writers); }};
+           fjexecutor.invokeAll(workers); 
+           endTime = System.currentTimeMillis();  
+           if(produceStats != null) {
+              produceStats.printAll();
+              produceStats.printTotal(endTime);
            }
- 
-           if (consumerCount > 0 ) {
-               consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
-               readers.forEach(r->fjexecutor. execute(r));
+
+           if ( consumeStats != null ) {
+              consumeStats.printTotal(endTime);
+
            }
 
         } catch (Exception e) {
             e.printStackTrace();
-            System.exit(1);
+        } finally {
+           fjexecutor.shutdown();
+           fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
         }
-
-
-        latch.await();
-        
-        long endTime = System.currentTimeMillis(); 
-      
-        System.out.println("\nFinished all producers");
-        if(producerCount != 0) {
-            produceStats.printAll();
-            produceStats.printTotal(endTime);
-        }
-
-        if ( consumerCount > 0 ) {
-            consumeStats.printTotal(endTime);
-
-        }
-
-        fjexecutor.shutdown();
-        fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
-
+            
         System.exit(0);
     }
 
@@ -420,45 +332,189 @@ public class PravegaPerfTest {
     }
 
 
-    /**
-     * A Sensor simulator class that generates dummy value as temperature measurement and ingests to specified stream.
-     */
+    private static class StartLocalService {
+        static final int PORT = 9090;
+        static final String SCOPE = "Scope";
+        static final String STREAM_NAME = "aaj";
+    }
+}
 
-    private static class WriterWorker implements Runnable {
+class StreamHandler{
+      String scope;
+      String stream;
+      String controllerUri;   
+      ControllerImpl controller; 
+      StreamManager streamManager;
+      StreamConfiguration streamconfig;
+      ReaderGroupManager readerGroupManager; 
+      ReaderGroup readerGroup;
+      ScheduledExecutorService bgexecutor;
+      int segCount;
+      int timeout;
 
-        final EventStreamWriter<String> producer;
-        private final int producerId;
-        private final int eventsPerSec;
-        private final int secondsToRun;
-        private final boolean isTransaction;
-	private final long StartTime;
 
-        WriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean isTransaction, boolean isRandomKey,
-                     long start, ClientFactory factory) {
+      StreamHandler(String scope, String stream, 
+                    String uri, int segs,
+                    int timeout,  ControllerImpl contrl,
+                    ScheduledExecutorService bgexecutor) throws Exception {
+               this.scope = scope;
+               this.stream = stream;
+               this.controllerUri= uri;
+               this.controller = contrl;
+               this.segCount = segs; 
+               this.timeout = timeout;
+               this.readerGroup = null;
+               this.bgexecutor = bgexecutor;
+               streamManager = StreamManager.create(new URI(uri));
+               streamManager.createScope(scope);
+               streamconfig = null;
+
+       } 
+
+
+       boolean create() throws Exception {
+               if (streamconfig == null)
+                   streamconfig = StreamConfiguration.builder().scope(scope).streamName(stream)
+                                                 .scalingPolicy(ScalingPolicy.fixed(segCount))
+                                                 .build();
+   
+               return streamManager.createStream(scope, stream,streamconfig);
+       }  
+
+       boolean scale() throws Exception {
+               StreamSegments segments = controller.getCurrentSegments(scope, stream).join();
+               final int nseg = segments.getSegments().size();
+               System.out.println("Current segments of the stream: "+stream+ " = " + nseg);
+                
+               if (nseg == segCount) {
+                  return true;  
+               }
+                  
+               System.out.println("The stream: " + stream + " will be manually scaling to "+ segCount+ " segments");
+
+               /*
+                * Note that the Upgrade stream API does not change the number of segments;
+                * but it indicates with new number of segments.
+                * after calling update stream , manual scaling is required
+                */
+               if (!streamManager.updateStream(scope, stream, streamconfig)) {
+                    System.out.println("Could not able to update the stream: " + stream + " try with another stream Name");
+                    return false;   
+               }
+
+               final double keyRangeChunk = 1.0 / segCount;
+               final Map<Double, Double> keyRanges = IntStream.range(0, segCount)
+                                                              .boxed()
+                                                              .collect(
+                                                               Collectors
+                                                              .toMap(x -> x * keyRangeChunk,
+                                                                      x->(x + 1) * keyRangeChunk));
+               final List<Long> segmentList = segments.getSegments()
+                                                      .stream()
+                                                      .map(Segment::getSegmentId)
+                                                      .collect(Collectors.toList());
+
+               /*
+                 System.out.println("The key ranges are");
+                 Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
+                 map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));
+                 System.out.println("segments list:"+segmentList);
+               */
+               CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope,stream),
+                                                                    segmentList,
+                                                                    keyRanges,
+                                                                    bgexecutor).getFuture();
+
+
+               if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
+                    System.out.println("ERROR : Scale operation on stream "+ stream+" did not complete");
+                    return false;
+               }
+
+               System.out.println("Number of Segments after manual scale: "+
+                                   controller.getCurrentSegments(scope, stream)
+                                             .get().getSegments().size());
+               return true;
+
+       } 
+
+       boolean recreate() throws Exception {
+               System.out.println("Sealing and Deleteing the stream : " + stream + " and then recreating the same");
+               CompletableFuture<Boolean> sealStatus =  controller.sealStream(scope, stream);
+               if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : Segment sealing operation on stream "+ stream + " did not complete");
+                    return false;
+               }
+
+               CompletableFuture<Boolean> status =  controller.deleteStream(scope, stream);
+               if (!status.get(timeout, TimeUnit.SECONDS)) {
+                    System.out.println("ERROR : stream: "+ stream + " delete failed");
+                    return false; 
+               }
+
+               if (!streamManager.createStream(scope, stream, streamconfig)) {
+                    System.out.println("ERROR : stream: "+ stream +" recreation failed");
+                    return false;
+               }
+               return true;
+       }
+
+       ReaderGroup  createReaderGroup() throws Exception {
+              if (readerGroup != null) return readerGroup;
+
+              readerGroupManager = ReaderGroupManager.withScope(scope,
+                                   ClientConfig.builder()
+                                               .controllerURI(new URI(controllerUri)).build());
+              readerGroupManager.createReaderGroup(stream,
+                                 ReaderGroupConfig.builder()
+                                                  .stream(Stream.of(scope, stream))
+                                                  .build());
+              readerGroup = readerGroupManager.getReaderGroup(stream);
+              return readerGroup;
+      }     
+
+}
+
+
+class WriterWorker implements Callable<Void> {
+      final EventStreamWriter<String> producer;
+      private final int producerId;
+      private final int eventsPerSec;
+      private final int secondsToRun;
+      private final int messageSize; 
+      private final long StartTime;
+      private final boolean isRandomKey;
+      private final PerfStats stats;
+
+      WriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
+                   boolean isRandomKey, int messageSize,  long start,
+                   ClientFactory factory, PerfStats stats,  String streamName) {
             this.producerId = sensorId;
             this.eventsPerSec = eventsPerSec;
             this.secondsToRun = secondsToRun;
-            this.isTransaction = isTransaction;
             this.StartTime = start;
+            this.stats = stats;
+            this.isRandomKey = isRandomKey; 
+            this.messageSize = messageSize;      
             this.producer = factory.createEventWriter(streamName,
                     new JavaSerializer<String>(),
                     EventWriterConfig.builder().build());
 
-        }
+      }
 
-        /**
-         * This function will be executed in a loop and time behavior is measured.
-         * @return A function which takes String key and data and returns a future object.
-         */
-        BiFunction<String, String, CompletableFuture> sendFunction() {
+      /**
+       * This function will be executed in a loop and time behavior is measured.
+       * @return A function which takes String key and data and returns a future object.
+       */
+      BiFunction<String, String, CompletableFuture> sendFunction() {
             return  ( key, data) -> producer.writeEvent(key, data);
-        }
+      }
 
-        /**
-         * Executes the given method over the producer with configured settings.
-         * @param fn The function to execute.
-         */
-        void runLoop(BiFunction<String, String, CompletableFuture> fn) {
+      /**
+        * Executes the given method over the producer with configured settings.
+        * @param fn The function to execute.
+        */
+      void runLoop(BiFunction<String, String, CompletableFuture> fn) throws Exception {
 
             CompletableFuture retFuture = null;
             final long mSeconds = secondsToRun*1000;
@@ -480,7 +536,7 @@ public class PravegaPerfTest {
                     }
                    
                     // event ingestion
-                    retFuture = produceStats.writeAndRecordTime(() -> {
+                    retFuture = stats.writeAndRecordTime(() -> {
                                 return fn.apply(key, payload);
                             },
                             payload.length());
@@ -488,16 +544,9 @@ public class PravegaPerfTest {
                 }
 
                 long timeSpent = System.currentTimeMillis() - loopStartTime;
-                // wait for next event
-                try {
                      if (timeSpent < 1000) {
                           Thread.sleep(1000 - timeSpent);
                      }
-                } catch (InterruptedException e) {
-                    // log exception
-                    e.printStackTrace();
-                    System.exit(1);
-                }
 
                 diffTime = System.currentTimeMillis() - StartTime; 
  
@@ -506,36 +555,37 @@ public class PravegaPerfTest {
             producer.flush();
             // producer.close();
  
-            try {
-                   //Wait for the last packet to get acked
-                   retFuture.get();
-            } catch (InterruptedException | ExecutionException e ) {
-                   e.printStackTrace();
-            }
+            //Wait for the last packet to get acked
+            retFuture.get();
         }
 
-        @Override
-        public void run() {
+      @Override
+      public Void call() throws Exception  {
             runLoop(sendFunction());
-            latch.countDown();
-        }
-    }
+            return null;   
+      }
+}
 
 
-    private static class TransactionWriterWorker extends WriterWorker {
+class TransactionWriterWorker extends WriterWorker {
+      private Transaction<String> transaction;
+      private final int transactionsPerCommit;
+      private int eventCount = 0;
 
-        private Transaction<String> transaction;
-        private final int transactionsPerCommit;
-        private int eventCount = 0;
+      TransactionWriterWorker(int sensorId, int eventsPerSec,
+                              int secondsToRun, boolean isRandomKey,
+                              int messageSize, long start,
+                              ClientFactory factory, PerfStats stats,
+                              String streamName, int transactionsPerCommit) {
 
-        TransactionWriterWorker(int sensorId, int eventsPerSec, int secondsToRun, boolean
-                isTransaction, boolean isRandomKey, int transactionsPerCommit, long start, ClientFactory factory) {
-            super(sensorId, eventsPerSec, secondsToRun, isTransaction, isRandomKey, start, factory);
+            super(sensorId, eventsPerSec, secondsToRun, isRandomKey,
+                  messageSize, start, factory, stats, streamName);
+
             this.transactionsPerCommit = transactionsPerCommit;
             transaction = producer.beginTxn();
-        }
+      }
 
-        BiFunction<String, String, CompletableFuture> sendFunction() {
+      BiFunction<String, String, CompletableFuture> sendFunction() {
             return  ( key, data) -> {
                 try {
                     eventCount++;
@@ -552,89 +602,70 @@ public class PravegaPerfTest {
                 return null;
 
           };
-        }
-    }
+      }
+}
 
-    /**
-     * A Sensor reader class that reads the temperative data
-     */
-    private static class ReaderWorker implements Runnable {
-       @Setter
-        public static AtomicInteger totalEvents;
-        private EventStreamReader<String> reader;
-        private final int secondsToRun;
-        private final long StartTime;
-        String readerId;
+class ReaderWorker implements Callable<Void> {
+       public static AtomicInteger totalEvents;
+       private EventStreamReader<String> reader;
+       private final int secondsToRun;
+       private final long StartTime;
+       private final int timeout;
+       private final PerfStats stats;
+       String readerId;
 
 
-        public ReaderWorker(int readerId, int secondsToRun, String readergrp,  long start,  ClientFactory factory) {
+       ReaderWorker (int readerId, int secondsToRun, long start,
+                    ClientFactory factory, PerfStats stats,
+                    String readergrp, int timeout) {
             this.readerId = Integer.toString(readerId);
             this.secondsToRun = secondsToRun; 
             this.StartTime=start;
+            this.stats = stats; 
+            this.timeout = timeout;
 
             reader = factory.createReader(
                     this.readerId, readergrp, new JavaSerializer<String>(), ReaderConfig.builder().build());
+       }
+
+       void cleanupEvents(PerfStats drainStats) throws Exception {
+            EventRead<String> result;
+            //System.out.format("******** Draining events from %s/%s%n", scopeName, streamName);
+            do {
+                long startTime = System.currentTimeMillis();
+                result = reader.readNextEvent(timeout);
+                if(result.getEvent()!=null) {
+                    drainStats.runAndRecordTime(() -> {
+                    return null;
+                    }, startTime, result.getEvent().length());
+                } else break;
+            }while (true);
+            drainStats.printTotal(System.currentTimeMillis());
         }
 
-        public void cleanupEvents() {
-            try {
-                EventRead<String> result;
-                System.out.format("******** Draining events from %s/%s%n", scopeName, streamName);
-                do {
-                    long startTime = System.currentTimeMillis();
-                    result = reader.readNextEvent(timeout);
-                    if(result.getEvent()!=null) {
-                        drainStats.runAndRecordTime(() -> {
-                            return null;
-                        }, startTime, result.getEvent().length());
-                    } else break;
-                }while (true);
-                drainStats.printTotal(System.currentTimeMillis());
-            } catch (ReinitializationRequiredException e) {
-                e.printStackTrace();
-            }
-
-        }
-
-        public void close(){
-             reader.close();
-        }
 
         @Override
-        public void run() {
-                System.out.format("******** Reading events from %s/%s%n", scopeName , streamName);
-                EventRead<String> event = null;
-                final long mSeconds = secondsToRun*1000;
-                long diffTime = mSeconds;
-
-                try {
-                    int counter = 0;
-                    do {
-                        final EventRead<String> result = reader.readNextEvent(timeout);
+        public Void call() throws Exception {
+             //System.out.format("******** Reading events from %s/%s%n", scopeName , streamName);
+             EventRead<String> event = null;
+             final long mSeconds = secondsToRun*1000;
+             long diffTime = mSeconds;
+             int counter = 0;
+             do {
+                 final EventRead<String> result = reader.readNextEvent(timeout);
                         
-                        if(result.getEvent() != null)
-                        {
-                           consumeStats.runAndRecordTime(() -> {
+                 if(result.getEvent() != null) {
+                           stats.runAndRecordTime(() -> {
                                         return null;
                                         }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
-                        } 
-                        counter = totalEvents.decrementAndGet();
-                        diffTime = System.currentTimeMillis() - StartTime;   
+                    } 
+                    counter = totalEvents.decrementAndGet();
+                    diffTime = System.currentTimeMillis() - StartTime;   
                         
-                    }while ((counter > 0) && (diffTime < mSeconds));
-                } catch (ReinitializationRequiredException e) {
-                    e.printStackTrace();
-                }
-                close();  
-                latch.countDown();   
+             }while ((counter > 0) && (diffTime < mSeconds));
+             reader.close();  
+             return null;
         }
 
-    }
-
-
-    private static class StartLocalService {
-        static final int PORT = 9090;
-        static final String SCOPE = "Scope";
-        static final String STREAM_NAME = "aaj";
-    }
 }
+
