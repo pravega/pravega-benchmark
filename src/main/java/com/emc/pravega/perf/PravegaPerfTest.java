@@ -136,21 +136,17 @@ public class PravegaPerfTest {
                                                              bgexecutor);
 
             if (producerCount > 0 &&  !streamHandle.create()) {
-               if (recreate) {
-                   if (!streamHandle.recreate()) {
-                        throw new Exception("Stream Recreation failed");
-                   }     
-               } else if (!streamHandle.scale()){
-                        throw new Exception("Stream Scaleing failed");
-               }   
+               if (recreate)
+                     streamHandle.recreate();
+               else
+                     streamHandle.scale();                    
             }
 
-            if (consumerCount > 0 )
-               readerGroup = streamHandle.createReaderGroup();      
             factory = new ClientFactoryImpl(scopeName, controller);
 
 
             if (consumerCount > 0 ) {
+               readerGroup = streamHandle.createReaderGroup();  
                drainStats = new PerfStats("Draining", reportingInterval, messageSize);
                consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
                ReaderWorker.totalEvents = new AtomicInteger(consumerCount * eventsPerSec * runtimeSec);
@@ -381,14 +377,12 @@ class StreamHandler{
                return streamManager.createStream(scope, stream,streamconfig);
        }  
 
-       boolean scale() throws Exception {
+       void scale() throws Exception {
                StreamSegments segments = controller.getCurrentSegments(scope, stream).join();
                final int nseg = segments.getSegments().size();
                System.out.println("Current segments of the stream: "+stream+ " = " + nseg);
                 
-               if (nseg == segCount) {
-                  return true;  
-               }
+               if (nseg == segCount)  return;  
                   
                System.out.println("The stream: " + stream + " will be manually scaling to "+ segCount+ " segments");
 
@@ -398,8 +392,7 @@ class StreamHandler{
                 * after calling update stream , manual scaling is required
                 */
                if (!streamManager.updateStream(scope, stream, streamconfig)) {
-                    System.out.println("Could not able to update the stream: " + stream + " try with another stream Name");
-                    return false;   
+                    throw new Exception("Could not able to update the stream: " + stream + " try with another stream Name");
                }
 
                final double keyRangeChunk = 1.0 / segCount;
@@ -414,12 +407,6 @@ class StreamHandler{
                                                       .map(Segment::getSegmentId)
                                                       .collect(Collectors.toList());
 
-               /*
-                 System.out.println("The key ranges are");
-                 Map<Double, Double> map = new TreeMap<Double, Double>(keyRanges);
-                 map.forEach((k,v) -> System.out.println("( "+k+", "+v +")"));
-                 System.out.println("segments list:"+segmentList);
-               */
                CompletableFuture <Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope,stream),
                                                                     segmentList,
                                                                     keyRanges,
@@ -427,36 +414,30 @@ class StreamHandler{
 
 
                if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
-                    System.out.println("ERROR : Scale operation on stream "+ stream+" did not complete");
-                    return false;
+                    throw new Exception("ERROR : Scale operation on stream "+ stream+" did not complete");
                }
 
                System.out.println("Number of Segments after manual scale: "+
                                    controller.getCurrentSegments(scope, stream)
                                              .get().getSegments().size());
-               return true;
 
        } 
 
-       boolean recreate() throws Exception {
+       void recreate() throws Exception {
                System.out.println("Sealing and Deleteing the stream : " + stream + " and then recreating the same");
                CompletableFuture<Boolean> sealStatus =  controller.sealStream(scope, stream);
                if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
-                    System.out.println("ERROR : Segment sealing operation on stream "+ stream + " did not complete");
-                    return false;
+                    throw new Exception("ERROR : Segment sealing operation on stream "+ stream + " did not complete");
                }
 
                CompletableFuture<Boolean> status =  controller.deleteStream(scope, stream);
                if (!status.get(timeout, TimeUnit.SECONDS)) {
-                    System.out.println("ERROR : stream: "+ stream + " delete failed");
-                    return false; 
+                    throw new Exception("ERROR : stream: "+ stream + " delete failed");
                }
 
                if (!streamManager.createStream(scope, stream, streamconfig)) {
-                    System.out.println("ERROR : stream: "+ stream +" recreation failed");
-                    return false;
+                    throw new Exception("ERROR : stream: "+ stream +" recreation failed");
                }
-               return true;
        }
 
        ReaderGroup  createReaderGroup() throws Exception {
@@ -607,7 +588,7 @@ class TransactionWriterWorker extends WriterWorker {
 
 class ReaderWorker implements Callable<Void> {
        public static AtomicInteger totalEvents;
-       private EventStreamReader<String> reader;
+       private final EventStreamReader<String> reader;
        private final int secondsToRun;
        private final long StartTime;
        private final int timeout;
