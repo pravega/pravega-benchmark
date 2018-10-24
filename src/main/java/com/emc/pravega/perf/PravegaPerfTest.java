@@ -144,9 +144,8 @@ public class PravegaPerfTest {
 
             factory = new ClientFactoryImpl(scopeName, controller);
 
-
             if (consumerCount > 0 ) {
-               readerGroup = streamHandle.createReaderGroup();  
+               readerGroup = streamHandle.createReaderGroup();
                drainStats = new PerfStats("Draining", reportingInterval, messageSize);
                consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
                ReaderWorker.totalEvents = new AtomicInteger(consumerCount * eventsPerSec * runtimeSec);
@@ -336,17 +335,17 @@ public class PravegaPerfTest {
 }
 
 class StreamHandler{
-      String scope;
-      String stream;
-      String controllerUri;   
+      final String scope;
+      final String stream;
+      final String controllerUri;   
       ControllerImpl controller; 
       StreamManager streamManager;
       StreamConfiguration streamconfig;
       ReaderGroupManager readerGroupManager; 
       ReaderGroup readerGroup;
       ScheduledExecutorService bgexecutor;
-      int segCount;
-      int timeout;
+      final int segCount;
+      final int timeout;
 
 
       StreamHandler(String scope, String stream, 
@@ -610,41 +609,44 @@ class ReaderWorker implements Callable<Void> {
        }
 
        void cleanupEvents(PerfStats drainStats) throws Exception {
-            EventRead<String> result;
-            //System.out.format("******** Draining events from %s/%s%n", scopeName, streamName);
+            EventRead<String> event;
+            String ret = null; 
             do {
                 long startTime = System.currentTimeMillis();
-                result = reader.readNextEvent(timeout);
-                if(result.getEvent()!=null) {
+                event = reader.readNextEvent(timeout);
+                ret = event.getEvent();
+                if(ret !=null) {
                     drainStats.runAndRecordTime(() -> {
-                    return null;
-                    }, startTime, result.getEvent().length());
-                } else break;
-            }while (true);
+                       return null;
+                    }, startTime, ret.length());
+                }
+            }while (ret != null);
             drainStats.printTotal(System.currentTimeMillis());
         }
 
 
         @Override
         public Void call() throws Exception {
-             //System.out.format("******** Reading events from %s/%s%n", scopeName , streamName);
              EventRead<String> event = null;
+             String ret = null;
              final long mSeconds = secondsToRun*1000;
              long diffTime = mSeconds;
              int counter = 0;
-             do {
-                 final EventRead<String> result = reader.readNextEvent(timeout);
-                        
-                 if(result.getEvent() != null) {
+             try {
+                 do {
+                     event = reader.readNextEvent(timeout);
+                     ret = event.getEvent(); 
+                     if(ret != null) {
                            stats.runAndRecordTime(() -> {
                                         return null;
-                                        }, Long.parseLong(result.getEvent().split(",")[0]), result.getEvent().length());
-                    } 
-                    counter = totalEvents.decrementAndGet();
-                    diffTime = System.currentTimeMillis() - StartTime;   
-                        
-             }while ((counter > 0) && (diffTime < mSeconds));
+                                        }, Long.parseLong(ret.split(",")[0]), ret.length());
+                     }      
+                     counter = totalEvents.decrementAndGet();
+                     diffTime = System.currentTimeMillis() - StartTime;   
+                 }while ((counter > 0) && (diffTime < mSeconds));
+             } finally {
              reader.close();  
+             }
              return null;
         }
 
