@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- * <p>
+ * 
  * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,18 +17,21 @@
  */
 package com.emc.pravega.perf;
 
-
-
-
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.Supplier;
+import io.pravega.client.stream.TxnFailedException;
+import io.pravega.client.stream.ReinitializationRequiredException;
+
+@FunctionalInterface
+interface SupplierWithCE<T, X extends Exception> {
+    T get() throws X;
+}
 
 class PerfStats {
-    private int messageSize;
-    private String action;
+    final private int messageSize;
+    final private String action;
     private long windowStartTime;
     private long start;
     private long windowStart;
@@ -40,7 +43,7 @@ class PerfStats {
     private double totalLatency;
     private long windowCount;
     private long windowBytes;
-    private long reportingInterval;
+    final private long reportingInterval;
 
     public PerfStats(String action, int reportingInterval, int messageSize) {
            this.action = action;
@@ -125,7 +128,7 @@ class PerfStats {
         return values;
     }
 
-    public CompletableFuture runAndRecordTime(Supplier<CompletableFuture> fn, long startTime, int length) throws Exception {
+    public CompletableFuture runAndRecordTime(SupplierWithCE<CompletableFuture, ReinitializationRequiredException> fn, long startTime, int length) throws ReinitializationRequiredException {
         CompletableFuture  retVal = fn.get();
         if(retVal == null) {
             final long endTime = System.currentTimeMillis();
@@ -140,12 +143,12 @@ class PerfStats {
 
     }
 
-    public CompletableFuture writeAndRecordTime(Supplier<CompletableFuture> fn, int length) throws Exception {
+    public CompletableFuture writeAndRecordTime(SupplierWithCE<CompletableFuture, TxnFailedException> fn, int length) throws TxnFailedException {
         CompletableFuture  retVal=null;
         final long startTime = System.currentTimeMillis();
- 
+
         retVal = fn.get();
-        
+
         if(retVal == null) {
             final long endTime = System.currentTimeMillis(); 
             record(length, startTime,  endTime);
