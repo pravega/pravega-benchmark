@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -42,28 +42,26 @@ import io.pravega.client.stream.impl.StreamImpl;
 import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
 
-
 public class PravegaStreamHandler {
     final String scope;
     final String stream;
     final String controllerUri;
-    ControllerImpl controller;
-    StreamManager streamManager;
-    StreamConfiguration streamconfig;
+    final ControllerImpl controller;
+    final StreamManager streamManager;
+    final StreamConfiguration streamconfig;
     ReaderGroupManager readerGroupManager;
     ReaderGroup readerGroup;
-    ScheduledExecutorService bgexecutor;
+    final ScheduledExecutorService bgexecutor;
     final int segCount;
     final int timeout;
 
-
     PravegaStreamHandler(String scope, String stream,
                          String uri, int segs,
-                         int timeout,  ControllerImpl contrl,
+                         int timeout, ControllerImpl contrl,
                          ScheduledExecutorService bgexecutor) throws Exception {
         this.scope = scope;
         this.stream = stream;
-        this.controllerUri= uri;
+        this.controllerUri = uri;
         this.controller = contrl;
         this.segCount = segs;
         this.timeout = timeout;
@@ -72,24 +70,24 @@ public class PravegaStreamHandler {
         streamManager = StreamManager.create(new URI(uri));
         streamManager.createScope(scope);
         streamconfig = StreamConfiguration.builder().scope(scope).streamName(stream)
-                        .scalingPolicy(ScalingPolicy.fixed(segCount))
-                        .build();
-
+                                          .scalingPolicy(ScalingPolicy.fixed(segCount))
+                                          .build();
     }
 
-
     boolean create() {
-        return streamManager.createStream(scope, stream,streamconfig);
+        return streamManager.createStream(scope, stream, streamconfig);
     }
 
     void scale() throws InterruptedException, ExecutionException, TimeoutException {
         StreamSegments segments = controller.getCurrentSegments(scope, stream).join();
         final int nseg = segments.getSegments().size();
-        System.out.println("Current segments of the stream: "+stream+ " = " + nseg);
+        System.out.println("Current segments of the stream: " + stream + " = " + nseg);
 
-        if (nseg == segCount)  return;
+        if (nseg == segCount) {
+            return;
+        }
 
-        System.out.println("The stream: " + stream + " will be manually scaling to "+ segCount+ " segments");
+        System.out.println("The stream: " + stream + " will be manually scaling to " + segCount + " segments");
 
         /*
          * Note that the Upgrade stream API does not change the number of segments;
@@ -97,66 +95,65 @@ public class PravegaStreamHandler {
          * after calling update stream , manual scaling is required
          */
         if (!streamManager.updateStream(scope, stream, streamconfig)) {
-            throw new InterruptedException("Could not able to update the stream: " + stream + " try with another stream Name");
+            throw new TimeoutException("Could not able to update the stream: " + stream + " try with another stream Name");
         }
 
         final double keyRangeChunk = 1.0 / segCount;
         final Map<Double, Double> keyRanges = IntStream.range(0, segCount)
-                .boxed()
-                .collect(
-                        Collectors
-                                .toMap(x -> x * keyRangeChunk,
-                                        x->(x + 1) * keyRangeChunk));
+                                                       .boxed()
+                                                       .collect(
+                                                           Collectors
+                                                               .toMap(x -> x * keyRangeChunk,
+                                                                   x -> (x + 1) * keyRangeChunk));
         final List<Long> segmentList = segments.getSegments()
-                .stream()
-                .map(Segment::getSegmentId)
-                .collect(Collectors.toList());
+                                               .stream()
+                                               .map(Segment::getSegmentId)
+                                               .collect(Collectors.toList());
 
-        CompletableFuture<Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope,stream),
-                segmentList,
-                keyRanges,
-                bgexecutor).getFuture();
+        CompletableFuture<Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope, stream),
+            segmentList,
+            keyRanges,
+            bgexecutor).getFuture();
 
-
-        if (!scaleStatus.get(timeout, TimeUnit.SECONDS)){
-            throw new InterruptedException("ERROR : Scale operation on stream "+ stream+" did not complete");
+        if (!scaleStatus.get(timeout, TimeUnit.SECONDS)) {
+            throw new TimeoutException("ERROR : Scale operation on stream " + stream + " did not complete");
         }
 
-        System.out.println("Number of Segments after manual scale: "+
-                controller.getCurrentSegments(scope, stream)
-                        .get().getSegments().size());
-
+        System.out.println("Number of Segments after manual scale: " +
+            controller.getCurrentSegments(scope, stream)
+                      .get().getSegments().size());
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
         System.out.println("Sealing and Deleteing the stream : " + stream + " and then recreating the same");
-        CompletableFuture<Boolean> sealStatus =  controller.sealStream(scope, stream);
+        CompletableFuture<Boolean> sealStatus = controller.sealStream(scope, stream);
         if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
-            throw new InterruptedException("ERROR : Segment sealing operation on stream "+ stream + " did not complete");
+            throw new TimeoutException("ERROR : Segment sealing operation on stream " + stream + " did not complete");
         }
 
-        CompletableFuture<Boolean> status =  controller.deleteStream(scope, stream);
+        CompletableFuture<Boolean> status = controller.deleteStream(scope, stream);
         if (!status.get(timeout, TimeUnit.SECONDS)) {
-            throw new InterruptedException("ERROR : stream: "+ stream + " delete failed");
+            throw new TimeoutException("ERROR : stream: " + stream + " delete failed");
         }
 
         if (!streamManager.createStream(scope, stream, streamconfig)) {
-            throw new InterruptedException("ERROR : stream: "+ stream +" recreation failed");
+            throw new TimeoutException("ERROR : stream: " + stream + " recreation failed");
         }
     }
 
-    ReaderGroup  createReaderGroup() throws URISyntaxException {
-        if (readerGroup != null) return readerGroup;
+    ReaderGroup createReaderGroup() throws URISyntaxException {
+        if (readerGroup != null) {
+            return readerGroup;
+        }
 
         readerGroupManager = ReaderGroupManager.withScope(scope,
-                ClientConfig.builder()
+            ClientConfig.builder()
                         .controllerURI(new URI(controllerUri)).build());
         readerGroupManager.createReaderGroup(stream,
-                ReaderGroupConfig.builder()
-                        .stream(Stream.of(scope, stream))
-                        .build());
+            ReaderGroupConfig.builder()
+                             .stream(Stream.of(scope, stream))
+                             .build());
         readerGroup = readerGroupManager.getReaderGroup(stream);
         return readerGroup;
     }
-
 }
