@@ -58,9 +58,7 @@ public class PravegaReaderWorker implements Callable<Void> {
             event = reader.readNextEvent(timeout);
             ret = event.getEvent();
             if (ret != null) {
-                drainStats.runAndRecordTime(() -> {
-                    return null;
-                }, startTime, ret.length());
+                drainStats.recordTime(null, startTime, ret.length());
             }
         } while (ret != null);
         drainStats.printTotal(System.currentTimeMillis());
@@ -78,9 +76,7 @@ public class PravegaReaderWorker implements Callable<Void> {
                 event = reader.readNextEvent(timeout);
                 ret = event.getEvent();
                 if (ret != null) {
-                    stats.runAndRecordTime(() -> {
-                        return null;
-                    }, Long.parseLong(ret.split(",")[0]), ret.length());
+                    stats.recordTime(null, Long.parseLong(ret.split(",")[0]), ret.length());
                 }
                 counter = totalEvents.decrementAndGet();
                 diffTime = System.currentTimeMillis() - StartTime;

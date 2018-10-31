@@ -49,8 +49,6 @@ public class PravegaStreamHandler {
     final ControllerImpl controller;
     final StreamManager streamManager;
     final StreamConfiguration streamconfig;
-    ReaderGroupManager readerGroupManager;
-    ReaderGroup readerGroup;
     final ScheduledExecutorService bgexecutor;
     final int segCount;
     final int timeout;
@@ -65,7 +63,6 @@ public class PravegaStreamHandler {
         this.controller = contrl;
         this.segCount = segs;
         this.timeout = timeout;
-        this.readerGroup = null;
         this.bgexecutor = bgexecutor;
         streamManager = StreamManager.create(new URI(uri));
         streamManager.createScope(scope);
@@ -142,18 +139,13 @@ public class PravegaStreamHandler {
     }
 
     ReaderGroup createReaderGroup() throws URISyntaxException {
-        if (readerGroup != null) {
-            return readerGroup;
-        }
-
-        readerGroupManager = ReaderGroupManager.withScope(scope,
+        ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
             ClientConfig.builder()
                         .controllerURI(new URI(controllerUri)).build());
         readerGroupManager.createReaderGroup(stream,
             ReaderGroupConfig.builder()
                              .stream(Stream.of(scope, stream))
                              .build());
-        readerGroup = readerGroupManager.getReaderGroup(stream);
-        return readerGroup;
+        return readerGroupManager.getReaderGroup(stream);
     }
 }

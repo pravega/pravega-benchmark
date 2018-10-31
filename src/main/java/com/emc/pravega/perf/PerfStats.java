@@ -24,11 +24,6 @@ import java.util.concurrent.Executor;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
-@FunctionalInterface
-interface SupplierWithCE<T, X extends Exception> {
-    T get() throws X;
-}
-
 class PerfStats {
     final private int messageSize;
     final private String action;
@@ -84,7 +79,7 @@ class PerfStats {
         this.count++;
 
         System.out.printf("%8d records %s, %9.1f records/sec, %9.3f MB/sec, %7.4f ms avg latency.\n",
-                windowCount, action, recsPerSec, mbPerSec, latency);
+            windowCount, action, recsPerSec, mbPerSec, latency);
     }
 
     private void newWindow(long currentNumber) {
@@ -109,8 +104,8 @@ class PerfStats {
         double mbPerSec = 1000.0 * this.bytes / (double) elapsed / (1024.0 * 1024.0);
         //double[] percs = percentiles(this.latencies, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(
-                "%d records %s, %.3f records/sec, %d bytes record size, %.3f MB/sec, %.4f ms avg latency, %.4f ms max latency\n",
-                iteration, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency);
+            "%d records %s, %.3f records/sec, %d bytes record size, %.3f MB/sec, %.4f ms avg latency, %.4f ms max latency\n",
+            iteration, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency);
         /*  
         System.out.printf("latencies percentiles:  %.4f ms 50th, %.4f ms 95th, %.4f ms 99th, %.4f ms 99.9th.\n",
                            percs[0], percs[1], percs[2], percs[3]);
@@ -128,26 +123,7 @@ class PerfStats {
         return values;
     }
 
-    public CompletableFuture runAndRecordTime(SupplierWithCE<CompletableFuture, ReinitializationRequiredException> fn, long startTime, int length) throws ReinitializationRequiredException {
-        CompletableFuture retVal = fn.get();
-        if (retVal == null) {
-            final long endTime = System.currentTimeMillis();
-            record(length, startTime, endTime);
-        } else {
-            retVal = retVal.thenAccept((d) -> {
-                final long endTime = System.currentTimeMillis();
-                record(length, startTime, endTime);
-            });
-        }
-        return retVal;
-    }
-
-    public CompletableFuture writeAndRecordTime(SupplierWithCE<CompletableFuture, TxnFailedException> fn, int length) throws TxnFailedException {
-        CompletableFuture retVal = null;
-        final long startTime = System.currentTimeMillis();
-
-        retVal = fn.get();
-
+    public CompletableFuture recordTime(CompletableFuture retVal, long startTime, int length) {
         if (retVal == null) {
             final long endTime = System.currentTimeMillis();
             record(length, startTime, endTime);

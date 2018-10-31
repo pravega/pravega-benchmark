@@ -8,7 +8,7 @@
  * with the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,11 +28,6 @@ import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.impl.JavaSerializer;
 import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
-
-@FunctionalInterface
-interface BiFunctionWithCE<T, U, R, X extends Exception> {
-    R apply(T t, U u) throws X;
-}
 
 public class PravegaWriterWorker implements Callable<Void> {
     final EventStreamWriter<String> producer;
@@ -64,20 +59,12 @@ public class PravegaWriterWorker implements Callable<Void> {
      *
      * @return A function which takes String key and data and returns a future object.
      */
-    BiFunctionWithCE<String, String, CompletableFuture, TxnFailedException> sendFunction() {
-        return (key, data) -> {
-            return producer.writeEvent(key, data);
-        };
+    public CompletableFuture writeData(String key, String data) throws TxnFailedException {
+        return producer.writeEvent(key, data);
     }
 
-    /**
-     * Executes the given method over the producer with configured settings.
-     *
-     * @param fn The function to execute.
-     */
-    void runLoop(BiFunctionWithCE<String, String, CompletableFuture, TxnFailedException> fn)
-        throws TxnFailedException, InterruptedException, ExecutionException {
-
+    @Override
+    public Void call() throws TxnFailedException, InterruptedException, ExecutionException {
         CompletableFuture retFuture = null;
         final long mSeconds = secondsToRun * 1000;
         long diffTime = mSeconds;
@@ -97,11 +84,11 @@ public class PravegaWriterWorker implements Callable<Void> {
                     key = Integer.toString(producerId);
                 }
 
+                long startTime = System.currentTimeMillis();
+                retFuture = writeData(key, payload);
                 // event ingestion
-                retFuture = stats.writeAndRecordTime(() -> {
-                        return fn.apply(key, payload);
-                    },
-                    payload.length());
+                retFuture =
+                    retFuture = stats.recordTime(retFuture, startTime, payload.length());
             }
 
             long timeSpent = System.currentTimeMillis() - loopStartTime;
@@ -117,11 +104,7 @@ public class PravegaWriterWorker implements Callable<Void> {
 
         //Wait for the last packet to get acked
         retFuture.get();
-    }
 
-    @Override
-    public Void call() throws TxnFailedException, InterruptedException, ExecutionException {
-        runLoop(sendFunction());
         return null;
     }
 }

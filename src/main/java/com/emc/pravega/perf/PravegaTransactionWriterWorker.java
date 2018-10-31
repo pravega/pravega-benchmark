@@ -16,7 +16,6 @@
  * limitations under the License.
  */
 
-
 package com.emc.pravega.perf;
 
 import java.util.concurrent.CompletableFuture;
@@ -24,34 +23,33 @@ import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 
-public class PravegaTransactionWriterWorker extends PravegaWriterWorker{
+public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     private Transaction<String> transaction;
     private final int transactionsPerCommit;
     private int eventCount = 0;
 
     PravegaTransactionWriterWorker(int sensorId, int eventsPerSec,
-                            int secondsToRun, boolean isRandomKey,
-                            int messageSize, long start,
-                            ClientFactory factory, PerfStats stats,
-                            String streamName, int transactionsPerCommit) {
+                                   int secondsToRun, boolean isRandomKey,
+                                   int messageSize, long start,
+                                   ClientFactory factory, PerfStats stats,
+                                   String streamName, int transactionsPerCommit) {
 
         super(sensorId, eventsPerSec, secondsToRun, isRandomKey,
-                messageSize, start, factory, stats, streamName);
+            messageSize, start, factory, stats, streamName);
 
         this.transactionsPerCommit = transactionsPerCommit;
         transaction = producer.beginTxn();
     }
 
-    BiFunctionWithCE<String, String, CompletableFuture, TxnFailedException> sendFunction() {
-        return  ( key, data)  -> {
-            eventCount++;
-            transaction.writeEvent(key, data);
-            if (eventCount >= transactionsPerCommit) {
-                eventCount = 0;
-                transaction.commit();
-                transaction = producer.beginTxn();
-            }
-            return null;
-        };
+    @Override
+    public CompletableFuture writeData(String key, String data) throws TxnFailedException {
+        eventCount++;
+        transaction.writeEvent(key, data);
+        if (eventCount >= transactionsPerCommit) {
+            eventCount = 0;
+            transaction.commit();
+            transaction = producer.beginTxn();
+        }
+        return null;
     }
 }
