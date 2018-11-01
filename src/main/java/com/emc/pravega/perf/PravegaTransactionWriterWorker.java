@@ -22,11 +22,13 @@ import java.util.concurrent.CompletableFuture;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
-    private Transaction<String> transaction;
+    private final AtomicReference<Transaction<String>> transaction;
     private final int transactionsPerCommit;
-    private int eventCount = 0;
+    private final AtomicInteger eventCount;
 
     PravegaTransactionWriterWorker(int sensorId, int eventsPerSec,
                                    int secondsToRun, boolean isRandomKey,
@@ -38,17 +40,17 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
             messageSize, start, factory, stats, streamName);
 
         this.transactionsPerCommit = transactionsPerCommit;
-        transaction = producer.beginTxn();
+        eventCount = new AtomicInteger(0);
+        transaction = new AtomicReference<Transaction<String>>(producer.beginTxn());
     }
 
     @Override
     public CompletableFuture writeData(String key, String data) throws TxnFailedException {
-        eventCount++;
-        transaction.writeEvent(key, data);
-        if (eventCount >= transactionsPerCommit) {
-            eventCount = 0;
-            transaction.commit();
-            transaction = producer.beginTxn();
+        transaction.get().writeEvent(key, data);
+        if (eventCount.incrementAndGet() >= transactionsPerCommit) {
+            eventCount.set(0);
+            transaction.get().commit();
+            transaction.set(producer.beginTxn());
         }
         return null;
     }

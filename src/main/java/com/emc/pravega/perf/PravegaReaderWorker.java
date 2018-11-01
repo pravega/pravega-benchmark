@@ -29,7 +29,8 @@ import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
 public class PravegaReaderWorker implements Callable<Void> {
-    public static AtomicInteger totalEvents;
+    public final static AtomicInteger eventCount = new AtomicInteger(0);
+    public final long totalEvents;
     private final EventStreamReader<String> reader;
     private final int secondsToRun;
     private final long StartTime;
@@ -39,12 +40,13 @@ public class PravegaReaderWorker implements Callable<Void> {
 
     PravegaReaderWorker(int readerId, int secondsToRun, long start,
                         ClientFactory factory, PerfStats stats,
-                        String readergrp, int timeout) {
+                        String readergrp, int timeout, long totalEvents) {
         this.readerId = Integer.toString(readerId);
         this.secondsToRun = secondsToRun;
         this.StartTime = start;
         this.stats = stats;
         this.timeout = timeout;
+        this.totalEvents = totalEvents;
 
         reader = factory.createReader(
             this.readerId, readergrp, new JavaSerializer<String>(), ReaderConfig.builder().build());
@@ -70,7 +72,6 @@ public class PravegaReaderWorker implements Callable<Void> {
         String ret = null;
         final long mSeconds = secondsToRun * 1000;
         long diffTime = mSeconds;
-        int counter = 0;
         try {
             do {
                 event = reader.readNextEvent(timeout);
@@ -78,9 +79,8 @@ public class PravegaReaderWorker implements Callable<Void> {
                 if (ret != null) {
                     stats.recordTime(null, Long.parseLong(ret.split(",")[0]), ret.length());
                 }
-                counter = totalEvents.decrementAndGet();
                 diffTime = System.currentTimeMillis() - StartTime;
-            } while ((counter > 0) && (diffTime < mSeconds));
+            } while ((eventCount.incrementAndGet() < totalEvents) && (diffTime < mSeconds));
         } finally {
             reader.close();
         }
