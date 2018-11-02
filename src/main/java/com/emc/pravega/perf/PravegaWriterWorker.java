@@ -25,7 +25,7 @@ import java.util.concurrent.ExecutionException;
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
-import io.pravega.client.stream.impl.JavaSerializer;
+import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
 
@@ -50,7 +50,7 @@ public class PravegaWriterWorker implements Callable<Void> {
         this.isRandomKey = isRandomKey;
         this.messageSize = messageSize;
         this.producer = factory.createEventWriter(streamName,
-            new JavaSerializer<String>(),
+            new UTF8StringSerializer(),
             EventWriterConfig.builder().build());
     }
 
@@ -59,12 +59,12 @@ public class PravegaWriterWorker implements Callable<Void> {
      *
      * @return A function which takes String key and data and returns a future object.
      */
-    public CompletableFuture writeData(String key, String data) throws TxnFailedException {
+    public CompletableFuture writeData(String key, String data) throws TxnFailedException, IllegalStateException {
         return producer.writeEvent(key, data);
     }
 
     @Override
-    public Void call() throws TxnFailedException, InterruptedException, ExecutionException {
+    public Void call() throws TxnFailedException, InterruptedException, ExecutionException, IllegalStateException {
         CompletableFuture retFuture = null;
         final long mSeconds = secondsToRun * 1000;
         long diffTime = mSeconds;

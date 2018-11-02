@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutionException;
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.ClientFactory;
-import io.pravega.client.stream.impl.JavaSerializer;
+import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
@@ -49,7 +49,7 @@ public class PravegaReaderWorker implements Callable<Void> {
         this.totalEvents = totalEvents;
 
         reader = factory.createReader(
-            this.readerId, readergrp, new JavaSerializer<String>(), ReaderConfig.builder().build());
+            this.readerId, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
     }
 
     public void cleanupEvents(PerfStats drainStats) throws ReinitializationRequiredException {

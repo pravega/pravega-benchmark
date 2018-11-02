@@ -45,12 +45,16 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     }
 
     @Override
-    public CompletableFuture writeData(String key, String data) throws TxnFailedException {
-        transaction.get().writeEvent(key, data);
+    public CompletableFuture writeData(String key, String data) throws TxnFailedException, IllegalStateException {
+        final Transaction<String> curTrans = transaction.get();
+
+        curTrans.writeEvent(key, data);
         if (eventCount.incrementAndGet() >= transactionsPerCommit) {
             eventCount.set(0);
-            transaction.get().commit();
-            transaction.set(producer.beginTxn());
+            curTrans.commit();
+            if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
+                throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");
+            }
         }
         return null;
     }
