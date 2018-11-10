@@ -99,26 +99,26 @@ public class PravegaStreamHandler {
         final Map<Double, Double> keyRanges = IntStream.range(0, segCount)
                                                        .boxed()
                                                        .collect(
-                                                           Collectors
-                                                               .toMap(x -> x * keyRangeChunk,
-                                                                   x -> (x + 1) * keyRangeChunk));
+                                                               Collectors
+                                                                       .toMap(x -> x * keyRangeChunk,
+                                                                               x -> (x + 1) * keyRangeChunk));
         final List<Long> segmentList = segments.getSegments()
                                                .stream()
                                                .map(Segment::getSegmentId)
                                                .collect(Collectors.toList());
 
         CompletableFuture<Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope, stream),
-            segmentList,
-            keyRanges,
-            bgexecutor).getFuture();
+                segmentList,
+                keyRanges,
+                bgexecutor).getFuture();
 
         if (!scaleStatus.get(timeout, TimeUnit.SECONDS)) {
             throw new TimeoutException("ERROR : Scale operation on stream " + stream + " did not complete");
         }
 
         System.out.println("Number of Segments after manual scale: " +
-            controller.getCurrentSegments(scope, stream)
-                      .get().getSegments().size());
+                controller.getCurrentSegments(scope, stream)
+                          .get().getSegments().size());
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
@@ -140,12 +140,12 @@ public class PravegaStreamHandler {
 
     ReaderGroup createReaderGroup() throws URISyntaxException {
         ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
-            ClientConfig.builder()
-                        .controllerURI(new URI(controllerUri)).build());
+                ClientConfig.builder()
+                            .controllerURI(new URI(controllerUri)).build());
         readerGroupManager.createReaderGroup(stream,
-            ReaderGroupConfig.builder()
-                             .stream(Stream.of(scope, stream))
-                             .build());
+                ReaderGroupConfig.builder()
+                                 .stream(Stream.of(scope, stream))
+                                 .build());
         return readerGroupManager.getReaderGroup(stream);
     }
 }
