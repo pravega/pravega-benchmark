@@ -25,6 +25,7 @@ import io.pravega.client.stream.ReinitializationRequiredException;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
+import java.time.Instant;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import org.apache.commons.cli.BasicParser;
@@ -79,8 +80,8 @@ public class PravegaPerfTest {
 
     public static void main(String[] args) {
 
-        final long StartTime = System.currentTimeMillis();
-        long endTime;
+        final Instant StartTime = Instant.now();
+        Instant endTime;
         ReaderGroup readerGroup = null;
         final int timeout = 10;
         final ClientFactory factory;
@@ -111,11 +112,11 @@ public class PravegaPerfTest {
                                                                 .clientConfig(ClientConfig.builder()
                                                                                           .controllerURI(new URI(controllerUri)).build())
                                                                 .maxBackoffMillis(5000).build(),
-                bgexecutor);
+                    bgexecutor);
 
             PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
-                segmentCount, timeout, controller,
-                bgexecutor);
+                    segmentCount, timeout, controller,
+                    bgexecutor);
 
             if (producerCount > 0 && !streamHandle.create()) {
                 if (recreate) {
@@ -135,9 +136,10 @@ public class PravegaPerfTest {
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
                                    .map(i -> new PravegaReaderWorker(i, runtimeSec,
-                                       StartTime, factory,
-                                       consumeStats, streamName, timeout,
-                                       consumerCount * eventsPerSec * runtimeSec))
+                                           StartTime, factory,
+                                           consumeStats, streamName,
+                                           consumerCount * eventsPerSec * runtimeSec,
+                                           timeout))
                                    .collect(Collectors.toList());
 
                 if (producerCount > 0) {
@@ -158,20 +160,23 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
                                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerSec,
-                                           runtimeSec, isRandomKey,
-                                           messageSize, StartTime,
-                                           factory, produceStats,
-                                           streamName, transactionPerCommit))
+                                               runtimeSec, isRandomKey,
+                                               messageSize, StartTime,
+                                               factory, produceStats,
+                                               streamName,
+                                               producerCount * eventsPerSec * runtimeSec,
+                                               transactionPerCommit))
                                        .collect(Collectors.toList());
                 } else {
 
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
                                        .map(i -> new PravegaWriterWorker(i, eventsPerSec,
-                                           runtimeSec, isRandomKey,
-                                           messageSize, StartTime,
-                                           factory, produceStats,
-                                           streamName))
+                                               runtimeSec, isRandomKey,
+                                               messageSize, StartTime,
+                                               factory, produceStats,
+                                               streamName,
+                                               producerCount * eventsPerSec * runtimeSec))
                                        .collect(Collectors.toList());
                 }
             } else {
@@ -186,7 +191,7 @@ public class PravegaPerfTest {
             fjexecutor.invokeAll(workers);
             fjexecutor.shutdown();
             fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
-            endTime = System.currentTimeMillis();
+            endTime = Instant.now();
             if (produceStats != null) {
                 produceStats.printAll();
                 produceStats.printTotal(endTime);

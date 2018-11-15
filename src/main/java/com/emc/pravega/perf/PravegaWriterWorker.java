@@ -22,26 +22,32 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.time.Instant;
+import java.time.Duration;
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PravegaWriterWorker implements Callable<Void> {
+    public final static AtomicInteger eventCount = new AtomicInteger(0);
+    public final long totalEvents;
     final EventStreamWriter<String> producer;
     private final int producerId;
     private final int eventsPerSec;
     private final int secondsToRun;
     private final int messageSize;
-    private final long StartTime;
+    private final Instant StartTime;
     private final boolean isRandomKey;
     private final PerfStats stats;
 
     PravegaWriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
-                        boolean isRandomKey, int messageSize, long start,
-                        ClientFactory factory, PerfStats stats, String streamName) {
+                        boolean isRandomKey, int messageSize, Instant start,
+                        ClientFactory factory, PerfStats stats, String streamName,
+                        long totalEvents) {
         this.producerId = sensorId;
         this.eventsPerSec = eventsPerSec;
         this.secondsToRun = secondsToRun;
@@ -49,9 +55,10 @@ public class PravegaWriterWorker implements Callable<Void> {
         this.stats = stats;
         this.isRandomKey = isRandomKey;
         this.messageSize = messageSize;
+        this.totalEvents = totalEvents;
         this.producer = factory.createEventWriter(streamName,
-            new UTF8StringSerializer(),
-            EventWriterConfig.builder().build());
+                new UTF8StringSerializer(),
+                EventWriterConfig.builder().build());
     }
 
     /**
@@ -66,13 +73,11 @@ public class PravegaWriterWorker implements Callable<Void> {
     @Override
     public Void call() throws TxnFailedException, InterruptedException, ExecutionException, IllegalStateException {
         CompletableFuture retFuture = null;
-        final long mSeconds = secondsToRun * 1000;
-        long diffTime = mSeconds;
 
         do {
-
-            long loopStartTime = System.currentTimeMillis();
-            for (int i = 0; i < eventsPerSec; i++) {
+            final Instant loopStartTime = Instant.now();
+            for (int i = 0; (i < eventsPerSec) && (eventCount.incrementAndGet() <= totalEvents) &&
+                    (Duration.between(loopStartTime, Instant.now()).getSeconds() < 1); i++) {
 
                 // Construct event payload
                 String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
@@ -84,20 +89,18 @@ public class PravegaWriterWorker implements Callable<Void> {
                     key = Integer.toString(producerId);
                 }
 
-                long startTime = System.currentTimeMillis();
+                final Instant startTime = Instant.now();
                 retFuture = writeData(key, payload);
                 // event ingestion
-                retFuture =
-                    retFuture = stats.recordTime(retFuture, startTime, payload.length());
+                retFuture = stats.recordTime(retFuture, startTime, payload.length());
             }
 
-            long timeSpent = System.currentTimeMillis() - loopStartTime;
+            long timeSpent = Duration.between(loopStartTime, Instant.now()).toMillis();
             if (timeSpent < 1000) {
                 Thread.sleep(1000 - timeSpent);
             }
-
-            diffTime = System.currentTimeMillis() - StartTime;
-        } while (diffTime < mSeconds);
+        } while ((Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) &&
+                (eventCount.get() < totalEvents));
 
         producer.flush();
         // producer.close();
