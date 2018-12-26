@@ -34,13 +34,12 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     PravegaTransactionWriterWorker(int sensorId, int eventsPerSec,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, Instant start,
-                                   ClientFactory factory, PerfStats stats,
-                                   String streamName,
-                                   long totalEvents,
+                                   PerfStats stats, String streamName,
+                                   long totalEvents, ClientFactory factory,
                                    int transactionsPerCommit) {
 
         super(sensorId, eventsPerSec, secondsToRun, isRandomKey,
-                messageSize, start, factory, stats, streamName, totalEvents);
+                messageSize, start, stats, streamName, totalEvents, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
         eventCount = new AtomicInteger(0);

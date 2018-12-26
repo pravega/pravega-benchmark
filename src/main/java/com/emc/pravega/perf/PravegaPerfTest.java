@@ -136,10 +136,9 @@ public class PravegaPerfTest {
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
                                    .map(i -> new PravegaReaderWorker(i, runtimeSec,
-                                           StartTime, factory,
-                                           consumeStats, streamName,
+                                           StartTime, consumeStats, streamName,
                                            consumerCount * eventsPerSec * runtimeSec,
-                                           timeout))
+                                           timeout, factory))
                                    .collect(Collectors.toList());
 
                 if (producerCount > 0) {
@@ -162,10 +161,9 @@ public class PravegaPerfTest {
                                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerSec,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
-                                               factory, produceStats,
-                                               streamName,
+                                               produceStats, streamName,
                                                producerCount * eventsPerSec * runtimeSec,
-                                               transactionPerCommit))
+                                               factory, transactionPerCommit))
                                        .collect(Collectors.toList());
                 } else {
 
@@ -174,9 +172,9 @@ public class PravegaPerfTest {
                                        .map(i -> new PravegaWriterWorker(i, eventsPerSec,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
-                                               factory, produceStats,
-                                               streamName,
-                                               producerCount * eventsPerSec * runtimeSec))
+                                               produceStats, streamName,
+                                               producerCount * eventsPerSec * runtimeSec,
+                                               factory))
                                        .collect(Collectors.toList());
                 }
             } else {

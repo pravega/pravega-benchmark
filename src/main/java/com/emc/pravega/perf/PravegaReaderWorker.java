@@ -30,26 +30,20 @@ import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
-public class PravegaReaderWorker implements Callable<Void> {
+public class PravegaReaderWorker extends Worker implements Callable<Void> {
     public final static AtomicInteger eventCount = new AtomicInteger(0);
-    public final long totalEvents;
+
     private final EventStreamReader<String> reader;
-    private final int secondsToRun;
-    private final Instant StartTime;
-    private final int timeout;
-    private final PerfStats stats;
     private final String readerId;
 
     PravegaReaderWorker(int readerId, int secondsToRun, Instant start,
-                        ClientFactory factory, PerfStats stats,
-                        String readergrp, long totalEvents, int timeout) {
-        this.readerId = Integer.toString(readerId);
-        this.secondsToRun = secondsToRun;
-        this.StartTime = start;
-        this.stats = stats;
-        this.totalEvents = totalEvents;
-        this.timeout = timeout;
+                        PerfStats stats, String readergrp, long totalEvents,
+                        int timeout, ClientFactory factory) {
+        super(readerId, 0, secondsToRun,
+                false, 0, start,
+                stats, readergrp, totalEvents, timeout);
 
+        this.readerId = Integer.toString(readerId);
         reader = factory.createReader(
                 this.readerId, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
     }
