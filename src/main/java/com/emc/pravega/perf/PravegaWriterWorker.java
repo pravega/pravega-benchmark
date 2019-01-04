@@ -32,30 +32,19 @@ import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class PravegaWriterWorker implements Callable<Void> {
+public class PravegaWriterWorker extends Worker implements Callable<Void> {
     public final static AtomicInteger eventCount = new AtomicInteger(0);
-    public final long totalEvents;
     final EventStreamWriter<String> producer;
-    private final int producerId;
-    private final int eventsPerSec;
-    private final int secondsToRun;
-    private final int messageSize;
-    private final Instant StartTime;
-    private final boolean isRandomKey;
-    private final PerfStats stats;
 
     PravegaWriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
                         boolean isRandomKey, int messageSize, Instant start,
-                        ClientFactory factory, PerfStats stats, String streamName,
-                        long totalEvents) {
-        this.producerId = sensorId;
-        this.eventsPerSec = eventsPerSec;
-        this.secondsToRun = secondsToRun;
-        this.StartTime = start;
-        this.stats = stats;
-        this.isRandomKey = isRandomKey;
-        this.messageSize = messageSize;
-        this.totalEvents = totalEvents;
+                        PerfStats stats, String streamName, long totalEvents,
+                        ClientFactory factory) {
+
+        super(sensorId, eventsPerSec, secondsToRun,
+                isRandomKey, messageSize, start,
+                stats, streamName, totalEvents, 0);
+
         this.producer = factory.createEventWriter(streamName,
                 new UTF8StringSerializer(),
                 EventWriterConfig.builder().build());
@@ -80,13 +69,13 @@ public class PravegaWriterWorker implements Callable<Void> {
                     (Duration.between(loopStartTime, Instant.now()).getSeconds() < 1); i++) {
 
                 // Construct event payload
-                String val = System.currentTimeMillis() + ", " + producerId + ", " + (int) (Math.random() * 200);
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
                 String key;
                 if (isRandomKey) {
-                    key = Integer.toString(producerId + new Random().nextInt());
+                    key = Integer.toString(workerID + new Random().nextInt());
                 } else {
-                    key = Integer.toString(producerId);
+                    key = Integer.toString(workerID);
                 }
 
                 final Instant startTime = Instant.now();
