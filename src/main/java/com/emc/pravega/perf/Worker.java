@@ -20,7 +20,7 @@ package com.emc.pravega.perf;
 
 import java.time.Instant;
 
-public class Worker {
+public abstract class Worker {
     final long totalEvents;
     final int workerID;
     final int eventsPerSec;
