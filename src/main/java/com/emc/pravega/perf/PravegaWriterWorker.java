@@ -47,11 +47,6 @@ public class PravegaWriterWorker extends WriterWorker {
                 EventWriterConfig.builder().build());
     }
 
-    /**
-     * This function will be executed in a loop and time behavior is measured.
-     *
-     * @return A function which takes String key and data and returns a future object.
-     */
     @Override
     public CompletableFuture writeData(String key, String data) throws IllegalStateException {
         return producer.writeEvent(key, data);
