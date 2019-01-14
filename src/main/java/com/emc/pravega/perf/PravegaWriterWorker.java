@@ -29,8 +29,11 @@ import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ *  class for Pravega writer/producer.
+ */
 public class PravegaWriterWorker extends WriterWorker {
-    public final static AtomicInteger eventCount = new AtomicInteger(0);
+    private final static AtomicInteger eventCount = new AtomicInteger(0);
     final EventStreamWriter<String> producer;
 
     PravegaWriterWorker(int sensorId, int eventsPerSec, int secondsToRun,

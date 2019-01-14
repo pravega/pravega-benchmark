@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     private final AtomicReference<Transaction<String>> transaction;
     private final int transactionsPerCommit;
-    private final AtomicInteger eventCount;
+    private final AtomicInteger transEventCount;
 
     PravegaTransactionWriterWorker(int sensorId, int eventsPerSec,
                                    int secondsToRun, boolean isRandomKey,
@@ -42,7 +42,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
                 messageSize, start, stats, streamName, totalEvents, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
-        eventCount = new AtomicInteger(0);
+        transEventCount = new AtomicInteger(0);
         transaction = new AtomicReference<Transaction<String>>(producer.beginTxn());
     }
 
@@ -52,8 +52,8 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
 
         try {
             curTrans.writeEvent(key, data);
-            if (eventCount.incrementAndGet() >= transactionsPerCommit) {
-                eventCount.set(0);
+            if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
+                transEventCount.set(0);
                 curTrans.commit();
                 if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
                     throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");

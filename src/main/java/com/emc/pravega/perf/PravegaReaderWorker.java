@@ -28,8 +28,12 @@ import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
+
+/**
+ *  class for Pravega reader/consumer.
+ */
 public class PravegaReaderWorker extends ReaderWorker  {
-    public final static AtomicInteger eventCount = new AtomicInteger(0);
+    private final static AtomicInteger eventCount = new AtomicInteger(0);
 
     private final EventStreamReader<String> reader;
     private final String readerId;

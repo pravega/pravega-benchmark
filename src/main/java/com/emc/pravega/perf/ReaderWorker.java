@@ -23,6 +23,9 @@ import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
+/**
+ *  abstract class for Readers.
+ */
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
     ReaderWorker(int readerId, int secondsToRun, Instant start,
@@ -33,14 +36,37 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                 stats, readergrp, totalEvents, timeout);
     }
 
+    /**
+     * read the data.
+     * @throws Exception if consumer failed to read required data.
+     */
     public abstract String readData() throws Exception;
 
+    /**
+     * close the consumer/reader.
+     *
+     */
     public abstract void close();
 
+    /**
+     * Increment the Event counter and return the updated value
+     *  @return incremented value.
+     *
+     */
     public abstract long eventCountIncrementAndGet();
 
+    /**
+     *  get the current event counter value
+     *  @return current value.
+     *
+     */
     public abstract long eventCountGet();
 
+    /**
+     * read all the data from reader/consumer.
+     * @param drainStats object which collects the details about the data read till there is no data to read from stream
+     * @throws Exception if consumer failed to read required data.
+     */
     public void cleanupEvents(PerfStats drainStats) throws Exception {
         String ret = null;
         do {

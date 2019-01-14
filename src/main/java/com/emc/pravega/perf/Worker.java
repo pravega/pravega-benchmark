@@ -20,6 +20,9 @@ package com.emc.pravega.perf;
 
 import java.time.Instant;
 
+/**
+ *  abstract class for Writers and Readers.
+ */
 public abstract class Worker {
     final long totalEvents;
     final int workerID;

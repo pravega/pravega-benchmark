@@ -26,6 +26,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ *  abstract class for Writers.
+ */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     WriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
@@ -37,12 +40,33 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 stats, streamName, totalEvents, 0);
     }
 
+    /**
+     * writes the data.
+     *
+     * @param key            key for data.
+     * @param data           data to write
+     */
     public abstract CompletableFuture writeData(String key, String data);
 
+    /**
+     * flush the producer data.
+     *
+     */
     public abstract void flush();
+
+    /**
+     * Increment the Event counter and return the updated value
+     *  @return incremented value.
+     *
+     */
 
     public abstract long eventCountIncrementAndGet();
 
+    /**
+     *  get the current event counter value
+     *  @return current value.
+     *
+     */
     public abstract long eventCountGet();
 
     @Override
