@@ -19,32 +19,31 @@
 package com.emc.pravega.perf;
 
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *  abstract class for Writers and Readers.
  */
 public abstract class Worker {
-    final long totalEvents;
     final int workerID;
-    final int eventsPerSec;
-    final int secondsToRun;
+    final int eventsPerWorker;
     final int messageSize;
-    final Instant StartTime;
-    final boolean isRandomKey;
-    final PerfStats stats;
     final int timeout;
+    final boolean isRandomKey;
+    final Instant StartTime;
+    final PerfStats stats;
+    final int secondsToRun;
 
-    Worker(int sensorId, int eventsPerSec, int secondsToRun,
+    Worker(int sensorId, int eventsPerWorker, int secondsToRun,
            boolean isRandomKey, int messageSize, Instant start,
-           PerfStats stats, String streamName, long totalEvents, int timeout) {
+           PerfStats stats, String streamName, int timeout) {
         this.workerID = sensorId;
-        this.eventsPerSec = eventsPerSec;
+        this.eventsPerWorker = eventsPerWorker;
         this.secondsToRun = secondsToRun;
         this.StartTime = start;
         this.stats = stats;
         this.isRandomKey = isRandomKey;
         this.messageSize = messageSize;
-        this.totalEvents = totalEvents;
         this.timeout = timeout;
     }
 }

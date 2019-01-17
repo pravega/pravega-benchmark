@@ -6,9 +6,7 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -70,17 +68,16 @@ public class PravegaPerfTest {
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
-    private static int eventsPerSec = 40;
-    private static int runtimeSec = 10;
+    private static int eventsPerWorker = 40;
     private static boolean isTransaction = false;
     private static int reportingInterval = 1000;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
+    private static int runtimeSec = (60 * 60 * 24);
 
     public static void main(String[] args) {
 
-        final Instant StartTime = Instant.now();
         Instant endTime;
         ReaderGroup readerGroup = null;
         final int timeout = 10;
@@ -127,6 +124,7 @@ public class PravegaPerfTest {
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);
+            final Instant StartTime = Instant.now();
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
@@ -135,10 +133,9 @@ public class PravegaPerfTest {
 
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
-                                   .map(i -> new PravegaReaderWorker(i, runtimeSec,
-                                           StartTime, consumeStats, streamName,
-                                           consumerCount * eventsPerSec * runtimeSec,
-                                           timeout, factory))
+                                   .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
+                                           runtimeSec, StartTime, consumeStats,
+                                           streamName, timeout, factory))
                                    .collect(Collectors.toList());
 
                 if (producerCount > 0) {
@@ -158,22 +155,20 @@ public class PravegaPerfTest {
 
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
-                                       .map(i -> new PravegaTransactionWriterWorker(i, eventsPerSec,
+                                       .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
-                                               producerCount * eventsPerSec * runtimeSec,
                                                factory, transactionPerCommit))
                                        .collect(Collectors.toList());
                 } else {
 
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
-                                       .map(i -> new PravegaWriterWorker(i, eventsPerSec,
+                                       .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
-                                               producerCount * eventsPerSec * runtimeSec,
                                                factory))
                                        .collect(Collectors.toList());
                 }
@@ -214,13 +209,11 @@ public class PravegaPerfTest {
         options.addOption("controller", true, "controller URI");
         options.addOption("producers", true, "number of producers");
         options.addOption("consumers", true, "number of consumers");
-        options.addOption("eventspersec", true, "number events per sec");
-        options.addOption("runtime", true, "number of seconds the code runs");
+        options.addOption("events", true, "number of events/records per producer/consumer");
+        options.addOption("time", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
-        options.addOption("size", true, "Size of each message (record)");
+        options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("stream", true, "Stream name");
-        options.addOption("writeonly", true, "Just produce vs read after produce");
-        options.addOption("reporting", true, "Reporting internval in milliseconds, default set to 1000ms (1 sec)");
         options.addOption("randomkey", true, "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
@@ -249,12 +242,12 @@ public class PravegaPerfTest {
                 consumerCount = Integer.parseInt(commandline.getOptionValue("consumers"));
             }
 
-            if (commandline.hasOption("eventspersec")) {
-                eventsPerSec = Integer.parseInt(commandline.getOptionValue("eventspersec"));
+            if (commandline.hasOption("events")) {
+                eventsPerWorker = Integer.parseInt(commandline.getOptionValue("events"));
             }
 
-            if (commandline.hasOption("runtime")) {
-                runtimeSec = Integer.parseInt(commandline.getOptionValue("runtime"));
+            if (commandline.hasOption("time")) {
+                runtimeSec = Integer.parseInt(commandline.getOptionValue("time"));
             }
 
             if (commandline.hasOption("transaction")) {
@@ -267,10 +260,6 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("stream")) {
                 streamName = commandline.getOptionValue("stream");
-            }
-
-            if (commandline.hasOption("reporting")) {
-                reportingInterval = Integer.parseInt(commandline.getOptionValue("reporting"));
             }
 
             if (commandline.hasOption("randomkey")) {

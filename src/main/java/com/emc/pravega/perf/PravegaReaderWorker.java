@@ -6,9 +6,7 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,20 +26,17 @@ import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
-
 /**
- *  class for Pravega reader/consumer.
+ * class for Pravega reader/consumer.
  */
-public class PravegaReaderWorker extends ReaderWorker  {
-    private final static AtomicInteger eventCount = new AtomicInteger(0);
-
+public class PravegaReaderWorker extends ReaderWorker {
     private final EventStreamReader<String> reader;
     private final String readerId;
 
-    PravegaReaderWorker(int readerId, int secondsToRun, Instant start,
-                        PerfStats stats, String readergrp, long totalEvents,
+    PravegaReaderWorker(int readerId, int eventsPerWorker, int secondsToRun,
+                        Instant start, PerfStats stats, String readergrp,
                         int timeout, ClientFactory factory) {
-        super(readerId, secondsToRun, start, stats, readergrp, totalEvents, timeout);
+        super(readerId, eventsPerWorker, secondsToRun, start, stats, readergrp, timeout);
 
         this.readerId = Integer.toString(readerId);
         reader = factory.createReader(
@@ -49,27 +44,17 @@ public class PravegaReaderWorker extends ReaderWorker  {
     }
 
     @Override
-    public  String readData() throws Exception {
+    public String readData() throws IllegalStateException {
         try {
-            return reader.readNextEvent(timeout).getEvent();
-        } catch(ReinitializationRequiredException e){
-            throw new Exception("ReinitializationRequiredException exception while reading data ");
+            String data = reader.readNextEvent(timeout).getEvent();
+            return data;
+        } catch (ReinitializationRequiredException e) {
+            throw new IllegalStateException(e);
         }
     }
 
     @Override
-    public void close(){
+    public void close() {
         reader.close();
     }
-
-    @Override
-    public long eventCountIncrementAndGet() {
-        return eventCount.incrementAndGet();
-    }
-
-    @Override
-    public long eventCountGet() {
-        return eventCount.get();
-    }
-
 }

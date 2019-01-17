@@ -6,9 +6,7 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,79 +25,55 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- *  abstract class for Writers.
+ * abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
 
-    WriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
+    WriterWorker(int sensorId, int eventsPerWorker, int secondsToRun,
                  boolean isRandomKey, int messageSize, Instant start,
-                 PerfStats stats, String streamName, long totalEvents) {
+                 PerfStats stats, String streamName) {
 
-        super(sensorId, eventsPerSec, secondsToRun,
+        super(sensorId, eventsPerWorker, secondsToRun,
                 isRandomKey, messageSize, start,
-                stats, streamName, totalEvents, 0);
+                stats, streamName, 0);
     }
 
     /**
      * writes the data.
      *
-     * @param key            key for data.
-     * @param data           data to write
+     * @param key  key for data.
+     * @param data data to write
      */
     public abstract CompletableFuture writeData(String key, String data);
 
     /**
      * flush the producer data.
-     *
      */
     public abstract void flush();
-
-    /**
-     * Increment the Event counter and return the updated value
-     *  @return incremented value.
-     *
-     */
-
-    public abstract long eventCountIncrementAndGet();
-
-    /**
-     *  get the current event counter value
-     *  @return current value.
-     *
-     */
-    public abstract long eventCountGet();
 
     @Override
     public Void call() throws InterruptedException, ExecutionException, IllegalStateException {
         CompletableFuture retFuture = null;
+        Random rand = new Random();
 
-        do {
-            final Instant loopStartTime = Instant.now();
-            for (int i = 0; (i < eventsPerSec) && (eventCountIncrementAndGet() <= totalEvents) &&
-                    (Duration.between(loopStartTime, Instant.now()).getSeconds() < 1); i++) {
+        for (int i = 0; (i < eventsPerWorker) &&
+                (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun); i++) {
 
-                // Construct event payload
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                String payload = String.format("%-" + messageSize + "s", val);
-                String key;
-                if (isRandomKey) {
-                    key = Integer.toString(workerID + new Random().nextInt());
-                } else {
-                    key = Integer.toString(workerID);
-                }
-
-                final Instant startTime = Instant.now();
-                retFuture = writeData(key, payload);
-                // event ingestion
-                retFuture = stats.recordTime(retFuture, startTime, payload.length());
+            // Construct event payload
+            String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+            String payload = String.format("%-" + messageSize + "s", val);
+            String key;
+            if (isRandomKey) {
+                key = Integer.toString(workerID + rand.nextInt());
+            } else {
+                key = Integer.toString(workerID);
             }
 
-            long timeSpent = Duration.between(loopStartTime, Instant.now()).toMillis();
-            if (timeSpent < 1000) {
-                Thread.sleep(1000 - timeSpent);
-            }
-        } while ((Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) &&
-                (eventCountGet() < totalEvents));
+            final Instant startTime = Instant.now();
+            retFuture = writeData(key, payload);
+            // event ingestion
+            retFuture = stats.recordTime(retFuture, startTime, payload.length());
+        }
 
         flush();
 

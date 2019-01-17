@@ -6,9 +6,7 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,20 +28,18 @@ import io.pravega.client.stream.TxnFailedException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- *  class for Pravega writer/producer.
+ * class for Pravega writer/producer.
  */
 public class PravegaWriterWorker extends WriterWorker {
-    private final static AtomicInteger eventCount = new AtomicInteger(0);
     final EventStreamWriter<String> producer;
 
-    PravegaWriterWorker(int sensorId, int eventsPerSec, int secondsToRun,
+    PravegaWriterWorker(int sensorId, int eventsPerWorker, int secondsToRun,
                         boolean isRandomKey, int messageSize, Instant start,
-                        PerfStats stats, String streamName, long totalEvents,
-                        ClientFactory factory) {
+                        PerfStats stats, String streamName, ClientFactory factory) {
 
-        super(sensorId, eventsPerSec, secondsToRun,
+        super(sensorId, eventsPerWorker, secondsToRun,
                 isRandomKey, messageSize, start,
-                stats, streamName, totalEvents);
+                stats, streamName);
 
         this.producer = factory.createEventWriter(streamName,
                 new UTF8StringSerializer(),
@@ -58,15 +54,5 @@ public class PravegaWriterWorker extends WriterWorker {
     @Override
     public void flush() {
         producer.flush();
-    }
-
-    @Override
-    public long eventCountIncrementAndGet() {
-        return eventCount.incrementAndGet();
-    }
-
-    @Override
-    public long eventCountGet() {
-        return eventCount.get();
     }
 }

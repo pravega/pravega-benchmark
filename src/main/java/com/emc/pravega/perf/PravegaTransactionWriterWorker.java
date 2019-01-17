@@ -6,9 +6,7 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,19 +29,26 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     private final int transactionsPerCommit;
     private final AtomicInteger transEventCount;
 
-    PravegaTransactionWriterWorker(int sensorId, int eventsPerSec,
+    PravegaTransactionWriterWorker(int sensorId, int eventsPerWorker,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, Instant start,
                                    PerfStats stats, String streamName,
-                                   long totalEvents, ClientFactory factory,
-                                   int transactionsPerCommit) {
+                                   ClientFactory factory, int transactionsPerCommit) {
 
-        super(sensorId, eventsPerSec, secondsToRun, isRandomKey,
-                messageSize, start, stats, streamName, totalEvents, factory);
+        super(sensorId, eventsPerWorker, secondsToRun, isRandomKey,
+                messageSize, start, stats, streamName, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
         transEventCount = new AtomicInteger(0);
         transaction = new AtomicReference<Transaction<String>>(producer.beginTxn());
+    }
+
+    private synchronized boolean transIncrementAndCompare() {
+        if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
+            transEventCount.set(0);
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -52,15 +57,14 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
 
         try {
             curTrans.writeEvent(key, data);
-            if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
-                transEventCount.set(0);
+            if (transIncrementAndCompare()) {
                 curTrans.commit();
                 if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
                     throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");
                 }
             }
         } catch (TxnFailedException e) {
-            throw new IllegalStateException("Write data failed with transaction failure.");
+            throw new IllegalStateException(e);
         }
         return null;
     }
