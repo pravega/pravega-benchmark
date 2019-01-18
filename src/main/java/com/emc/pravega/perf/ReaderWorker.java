@@ -6,7 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,10 +38,8 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
     /**
      * read the data.
-     *
-     * @throws Exception if consumer failed to read required data.
      */
-    public abstract String readData() throws Exception;
+    public abstract String readData();
 
     /**
      * close the consumer/reader.
@@ -50,9 +50,8 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
      * read all the data from reader/consumer.
      *
      * @param drainStats object which collects the details about the data read till there is no data to read from stream
-     * @throws Exception if consumer failed to read required data.
      */
-    public void cleanupEvents(PerfStats drainStats) throws Exception {
+    public void cleanupEvents(PerfStats drainStats) {
         String ret = null;
         do {
             final Instant startTime = Instant.now();
@@ -65,7 +64,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     }
 
     @Override
-    public Void call() throws ExecutionException, Exception {
+    public Void call() {
         String ret = null;
         try {
 

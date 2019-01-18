@@ -6,7 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -43,28 +45,23 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
         transaction = new AtomicReference<Transaction<String>>(producer.beginTxn());
     }
 
-    private synchronized boolean transIncrementAndCompare() {
-        if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
-            transEventCount.set(0);
-            return true;
-        }
-        return false;
-    }
-
     @Override
-    public CompletableFuture writeData(String key, String data) throws IllegalStateException {
+    public CompletableFuture writeData(String key, String data) {
         final Transaction<String> curTrans = transaction.get();
 
         try {
             curTrans.writeEvent(key, data);
-            if (transIncrementAndCompare()) {
-                curTrans.commit();
-                if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
-                    throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");
+            synchronized (this) {
+                if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
+                    transEventCount.set(0);
+                    curTrans.commit();
+                    if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
+                        throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");
+                    }
                 }
             }
         } catch (TxnFailedException e) {
-            throw new IllegalStateException(e);
+            throw new RuntimeException("Transaction Write data failed ", e);
         }
         return null;
     }

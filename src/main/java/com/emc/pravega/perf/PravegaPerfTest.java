@@ -6,7 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -68,13 +70,13 @@ public class PravegaPerfTest {
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
-    private static int eventsPerWorker = 40;
+    private static int eventsPerWorker = 3000;
     private static boolean isTransaction = false;
-    private static int reportingInterval = 1000;
     private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
     private static int runtimeSec = (60 * 60 * 24);
+    private static final int reportingInterval = 1000;
 
     public static void main(String[] args) {
 
@@ -152,7 +154,6 @@ public class PravegaPerfTest {
 
                 produceStats = new PerfStats("Writing", reportingInterval, messageSize);
                 if (isTransaction) {
-
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
                                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
@@ -162,7 +163,6 @@ public class PravegaPerfTest {
                                                factory, transactionPerCommit))
                                        .collect(Collectors.toList());
                 } else {
-
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
                                        .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
