@@ -72,7 +72,6 @@ public class PravegaPerfTest {
     private static int segmentCount = 0;
     private static int eventsPerWorker = 3000;
     private static boolean isTransaction = false;
-    private static boolean runKafka = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
     private static int runtimeSec = (60 * 60 * 24);
@@ -268,10 +267,6 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("transactionspercommit")) {
                 transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
-            }
-
-            if (commandline.hasOption("kafka")) {
-                runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
             }
 
             if (commandline.hasOption("segments")) {
