@@ -8,7 +8,7 @@
  * with the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,11 +25,16 @@ import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.concurrent.GuardedBy;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
-    private final AtomicReference<Transaction<String>> transaction;
     private final int transactionsPerCommit;
-    private final AtomicInteger transEventCount;
+
+    @GuardedBy("this")
+    private int eventCount;
+
+    @GuardedBy("this")
+    private Transaction<String> transaction;
 
     PravegaTransactionWriterWorker(int sensorId, int eventsPerWorker,
                                    int secondsToRun, boolean isRandomKey,
@@ -41,23 +46,20 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
                 messageSize, start, stats, streamName, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
-        transEventCount = new AtomicInteger(0);
-        transaction = new AtomicReference<Transaction<String>>(producer.beginTxn());
+        eventCount = 0;
+        transaction = producer.beginTxn();
     }
 
     @Override
     public CompletableFuture writeData(String key, String data) {
-        final Transaction<String> curTrans = transaction.get();
-
         try {
-            curTrans.writeEvent(key, data);
+            transaction.writeEvent(key, data);
             synchronized (this) {
-                if (transEventCount.incrementAndGet() >= transactionsPerCommit) {
-                    transEventCount.set(0);
-                    curTrans.commit();
-                    if (!transaction.compareAndSet(curTrans, producer.beginTxn())) {
-                        throw new IllegalStateException("WriteData called on the same PravegaTransactionWriterWorker from two threads in parallel.");
-                    }
+                eventCount++;
+                if (eventCount >= transactionsPerCommit) {
+                    eventCount = 0;
+                    transaction.commit();
+                    transaction = producer.beginTxn();
                 }
             }
         } catch (TxnFailedException e) {
