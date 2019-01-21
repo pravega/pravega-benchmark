@@ -67,12 +67,12 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     public Void call() {
         String ret = null;
         try {
-
             for (int i = 0; (i < eventsPerWorker) &&
                     (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun); i++) {
+                final Instant startTime = Instant.now();
                 ret = readData();
                 if (ret != null) {
-                    stats.recordTime(null, Instant.ofEpochMilli(Long.parseLong(ret.split(",")[0])), ret.length());
+                    stats.recordTime(null, startTime, ret.length());
                 }
             }
         } finally {
