@@ -46,22 +46,6 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
      */
     public abstract void close();
 
-    /**
-     * read all the data from reader/consumer.
-     *
-     * @param drainStats object which collects the details about the data read till there is no data to read from stream
-     */
-    public void cleanupEvents(PerfStats drainStats) {
-        String ret = null;
-        do {
-            final Instant startTime = Instant.now();
-            ret = readData();
-            if (ret != null) {
-                drainStats.recordTime(null, startTime, ret.length());
-            }
-        } while (ret != null);
-        drainStats.printTotal(Instant.now());
-    }
 
     @Override
     public Void call() {
