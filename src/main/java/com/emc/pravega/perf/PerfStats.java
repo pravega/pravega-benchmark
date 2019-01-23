@@ -26,7 +26,10 @@ import java.time.Duration;
 import io.pravega.client.stream.TxnFailedException;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
-class PerfStats {
+/**
+ *  class for Performance statistics.
+ */
+public class PerfStats {
     final private int messageSize;
     final private String action;
     private Instant windowStartTime;
@@ -57,7 +60,7 @@ class PerfStats {
         this.messageSize = messageSize;
     }
 
-    public synchronized void record(int bytes, Instant startTime, Instant endTime) {
+    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
         this.iteration++;
         this.windowBytes += bytes;
         this.windowCount++;
@@ -100,6 +103,11 @@ class PerfStats {
         */
     }
 
+    /**
+     * print the final performance statistics.
+     *
+     * @param endTime        endtime to performance benchmarking.
+     */
     public synchronized void printTotal(Instant endTime) {
         final long elapsed = Duration.between(start, endTime).toMillis();
         double recsPerSec = 1000.0 * iteration / (double) elapsed;
@@ -125,6 +133,14 @@ class PerfStats {
         return values;
     }
 
+    /**
+     * record the data write/read time of given length of data.
+     *
+     * @param retVal         future to wait for.
+     * @param startTime      starting time
+     * @param length         length of data read/written
+     * @return a completable future for recording the end time.
+     */
     public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) {
         if (retVal == null) {
             final Instant endTime = Instant.now();
