@@ -18,9 +18,7 @@
 
 package com.emc.pravega.perf;
 
-import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutionException;
 import io.pravega.client.stream.EventStreamReader;
@@ -30,54 +28,35 @@ import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
-public class PravegaReaderWorker extends Worker implements Callable<Void> {
-    public final static AtomicInteger eventCount = new AtomicInteger(0);
-
+/**
+ * class for Pravega reader/consumer.
+ */
+public class PravegaReaderWorker extends ReaderWorker {
     private final EventStreamReader<String> reader;
     private final String readerId;
 
-    PravegaReaderWorker(int readerId, int secondsToRun, Instant start,
-                        PerfStats stats, String readergrp, long totalEvents,
+    PravegaReaderWorker(int readerId, int eventsPerWorker, int secondsToRun,
+                        Instant start, PerfStats stats, String readergrp,
                         int timeout, ClientFactory factory) {
-        super(readerId, 0, secondsToRun,
-                false, 0, start,
-                stats, readergrp, totalEvents, timeout);
+        super(readerId, eventsPerWorker, secondsToRun, start, stats, readergrp, timeout);
 
         this.readerId = Integer.toString(readerId);
         reader = factory.createReader(
                 this.readerId, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
     }
 
-    public void cleanupEvents(PerfStats drainStats) throws ReinitializationRequiredException {
-        EventRead<String> event;
-        String ret = null;
-        do {
-            final Instant startTime = Instant.now();
-            event = reader.readNextEvent(timeout);
-            ret = event.getEvent();
-            if (ret != null) {
-                drainStats.recordTime(null, startTime, ret.length());
-            }
-        } while (ret != null);
-        drainStats.printTotal(Instant.now());
+    @Override
+    public String readData() {
+        try {
+            String data = reader.readNextEvent(timeout).getEvent();
+            return data;
+        } catch (ReinitializationRequiredException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Override
-    public Void call() throws ReinitializationRequiredException, ExecutionException {
-        EventRead<String> event = null;
-        String ret = null;
-        try {
-            do {
-                event = reader.readNextEvent(timeout);
-                ret = event.getEvent();
-                if (ret != null) {
-                    stats.recordTime(null, Instant.ofEpochMilli(Long.parseLong(ret.split(",")[0])), ret.length());
-                }
-            } while ((Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) &&
-                    (eventCount.incrementAndGet() < totalEvents));
-        } finally {
-            reader.close();
-        }
-        return null;
+    public void close() {
+        reader.close();
     }
 }
