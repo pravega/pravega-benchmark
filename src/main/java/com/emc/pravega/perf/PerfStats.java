@@ -105,6 +105,7 @@ public class PerfStats {
         this.windowTotalLatency = 0;
     }
 
+
     /**
      * print the final performance statistics.
      *

@@ -129,20 +129,13 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                drainStats = new PerfStats("Draining", reportingInterval, messageSize, consumerCount * eventsPerWorker);
                 consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * eventsPerWorker);
-
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
                                    .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
                                            runtimeSec, StartTime, consumeStats,
                                            streamName, timeout, factory))
                                    .collect(Collectors.toList());
-
-                if (producerCount > 0) {
-                    PravegaReaderWorker r = (PravegaReaderWorker) readers.get(0);
-                    r.cleanupEvents(drainStats);
-                }
             } else {
                 readers = null;
                 drainStats = null;
