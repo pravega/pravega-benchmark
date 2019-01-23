@@ -53,8 +53,8 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @Override
     public CompletableFuture writeData(String key, String data) {
         try {
-            transaction.writeEvent(key, data);
-            synchronized (this) {
+             synchronized (this) {
+                transaction.writeEvent(key, data);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
                     eventCount = 0;
