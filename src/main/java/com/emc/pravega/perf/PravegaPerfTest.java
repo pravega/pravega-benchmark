@@ -129,8 +129,7 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize);
-
+                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * eventsPerWorker);
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
                                    .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
@@ -145,7 +144,7 @@ public class PravegaPerfTest {
 
             if (producerCount > 0) {
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize);
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * eventsPerWorker);
                 if (isTransaction) {
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
@@ -179,7 +178,6 @@ public class PravegaPerfTest {
             fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
             endTime = Instant.now();
             if (produceStats != null) {
-                produceStats.printAll();
                 produceStats.printTotal(endTime);
             }
 
