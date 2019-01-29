@@ -75,7 +75,7 @@ public class PravegaPerfTest {
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
     private static int runtimeSec = (60 * 60 * 24);
-    private static final int reportingInterval = 1000;
+    private static final int reportingInterval = 5000;
 
     public static void main(String[] args) {
 

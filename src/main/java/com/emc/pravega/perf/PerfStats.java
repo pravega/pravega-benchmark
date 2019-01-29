@@ -87,9 +87,9 @@ public class PerfStats {
     }
 
     private void printWindow(Instant endTime) {
-        final long elapsed = Duration.between(windowStartTime, endTime).toMillis();
-        final double recsPerSec = 1000.0 * windowCount / (double) elapsed;
-        final double mbPerSec = 1000.0 * this.windowBytes / (double) elapsed / (1024.0 * 1024.0);
+        final long elapsed = Duration.between(windowStartTime, endTime).getSeconds();
+        final double recsPerSec = windowCount / (double) elapsed;
+        final double mbPerSec = (this.windowBytes / (1024.0 * 1024.0))/(double) elapsed;
 
         System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
                 windowCount, action, recsPerSec, mbPerSec,
@@ -112,9 +112,10 @@ public class PerfStats {
      * @param endTime        endtime to performance benchmarking.
      */
     public synchronized void printTotal(Instant endTime) {
-        final long elapsed = Duration.between(start, endTime).toMillis();
-        double recsPerSec = 1000.0 * count / (double) elapsed;
-        double mbPerSec = 1000.0 * this.bytes / (double) elapsed / (1024.0 * 1024.0);
+        final long elapsed = Duration.between(start, endTime).getSeconds();
+        double recsPerSec =  count / (double) elapsed;
+        double mbPerSec = (this.bytes / (1024.0 * 1024.0))/(double) elapsed ;
+
         long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(
                 "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
