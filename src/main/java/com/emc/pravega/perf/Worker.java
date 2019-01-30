@@ -29,6 +29,7 @@ public abstract class Worker {
     final int eventsPerWorker;
     final int messageSize;
     final int timeout;
+    final String streamName;
     final boolean isRandomKey;
     final Instant StartTime;
     final PerfStats stats;
@@ -42,6 +43,7 @@ public abstract class Worker {
         this.secondsToRun = secondsToRun;
         this.StartTime = start;
         this.stats = stats;
+        this.streamName = streamName;
         this.isRandomKey = isRandomKey;
         this.messageSize = messageSize;
         this.timeout = timeout;
