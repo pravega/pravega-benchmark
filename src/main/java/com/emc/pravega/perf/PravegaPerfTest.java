@@ -76,17 +76,17 @@ public class PravegaPerfTest {
     private static int transactionPerCommit = 1;
     private static int runtimeSec = (60 * 60 * 24);
     private static final int reportingInterval = 5000;
+    private static ScheduledExecutorService bgexecutor;
+    private static ForkJoinPool fjexecutor;
+    private static PerfStats produceStats, consumeStats;
 
     public static void main(String[] args) {
 
-        Instant endTime;
         ReaderGroup readerGroup = null;
         final int timeout = 10;
         final ClientFactory factory;
         ControllerImpl controller = null;
-        ScheduledExecutorService bgexecutor;
-        ForkJoinPool fjexecutor;
-        final PerfStats produceStats, consumeStats, drainStats;
+
         final List<Callable<Void>> readers;
         final List<Callable<Void>> writers;
 
@@ -138,7 +138,6 @@ public class PravegaPerfTest {
                                    .collect(Collectors.toList());
             } else {
                 readers = null;
-                drainStats = null;
                 consumeStats = null;
             }
 
@@ -173,22 +172,44 @@ public class PravegaPerfTest {
                                                        .filter(x -> x != null)
                                                        .flatMap(x -> x.stream())
                                                        .collect(Collectors.toList());
-            fjexecutor.invokeAll(workers);
-            fjexecutor.shutdown();
-            fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
-            endTime = Instant.now();
-            if (produceStats != null) {
-                produceStats.printTotal(endTime);
-            }
 
-            if (consumeStats != null) {
-                consumeStats.printTotal(endTime);
-            }
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                public void run() {
+                    try {
+                        System.out.println();
+                        shutdown();
+                    } catch (InterruptedException e) {
+                         e.printStackTrace();
+                    }
+                }
+            });
+
+            fjexecutor.invokeAll(workers);
+            shutdown();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         System.exit(0);
+    }
+
+    private static synchronized  void shutdown() throws InterruptedException {
+        Instant endTime;
+        if (fjexecutor == null) {
+            return;
+        }
+        fjexecutor.shutdown();
+        fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
+        fjexecutor = null;
+        endTime = Instant.now();
+        if (produceStats != null) {
+            produceStats.printTotal(endTime);
+        }
+
+        if (consumeStats != null) {
+            consumeStats.printTotal(endTime);
+        }
     }
 
     private static void parseCmdLine(String[] args) throws ParseException {
