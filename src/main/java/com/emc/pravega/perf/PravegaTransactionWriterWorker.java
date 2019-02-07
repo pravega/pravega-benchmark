@@ -36,13 +36,13 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @GuardedBy("this")
     private Transaction<String> transaction;
 
-    PravegaTransactionWriterWorker(int sensorId, int eventsPerWorker,
+    PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, Instant start,
                                    PerfStats stats, String streamName,
                                    ClientFactory factory, int transactionsPerCommit) {
 
-        super(sensorId, eventsPerWorker, secondsToRun, isRandomKey,
+        super(sensorId, events, secondsToRun, isRandomKey,
                 messageSize, start, stats, streamName, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;

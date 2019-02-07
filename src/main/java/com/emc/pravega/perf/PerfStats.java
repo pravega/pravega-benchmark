@@ -18,9 +18,7 @@
 package com.emc.pravega.perf;
 
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.time.Instant;
 import java.time.Duration;
 import io.pravega.client.stream.TxnFailedException;
@@ -80,16 +78,16 @@ public class PerfStats {
         }
 
         /* did we arrived at reporting time */
-        if (Duration.between(windowStartTime, endTime).toMillis() >= reportingInterval) {
+        if (Duration.between(windowStartTime, endTime).toMillis() > reportingInterval) {
             printWindow(endTime);
             newWindow();
         }
     }
 
     private void printWindow(Instant endTime) {
-        final double elapsed = Duration.between(windowStartTime, endTime).toMillis()/1000.0;
+        final double elapsed = Duration.between(windowStartTime, endTime).toMillis() / 1000.0;
         final double recsPerSec = windowCount / elapsed;
-        final double mbPerSec = (this.windowBytes / (1024.0 * 1024.0))/ elapsed;
+        final double mbPerSec = (this.windowBytes / (1024.0 * 1024.0)) / elapsed;
 
         System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
                 windowCount, action, recsPerSec, mbPerSec,
@@ -105,16 +103,15 @@ public class PerfStats {
         this.windowTotalLatency = 0;
     }
 
-
     /**
      * print the final performance statistics.
      *
      * @param endTime        endtime to performance benchmarking.
      */
     public synchronized void printTotal(Instant endTime) {
-        final double elapsed = Duration.between(start, endTime).toMillis()/1000.0;
-        final double recsPerSec =  count / elapsed;
-        final double mbPerSec = (this.bytes / (1024.0 * 1024.0))/elapsed ;
+        final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
+        final double recsPerSec = count / elapsed;
+        final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
         long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(

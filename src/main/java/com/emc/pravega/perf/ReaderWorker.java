@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,18 +22,20 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
+
 
 /**
  * abstract class for Readers.
  */
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
+    final private performance perf;
 
-    ReaderWorker(int readerId, int eventsPerWorker, int secondsToRun, Instant start,
+    ReaderWorker(int readerId, int events, int secondsToRun, Instant start,
                  PerfStats stats, String readergrp, int timeout) {
-        super(readerId, eventsPerWorker, secondsToRun,
+        super(readerId, events, secondsToRun,
                 false, 0, start,
                 stats, readergrp, timeout);
+        perf = secondsToRun > 0 ? new eventstimeReader() : new eventsReader();
     }
 
     /**
@@ -47,21 +49,45 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     public abstract void close();
 
     @Override
-    public Void call() {
-        String ret = null;
-        try {
-
-            for (int i = 0; (i < eventsPerWorker) &&
-                    (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun); i++) {
-                final Instant startTime = Instant.now();
-                ret = readData();
-                if (ret != null) {
-                    stats.recordTime(null, startTime, ret.length());
-                }
-            }
-        } finally {
-            close();
-        }
+    public Void call() throws InterruptedException, ExecutionException {
+        perf.benchmark();
         return null;
+    }
+
+    private class eventsReader implements performance {
+
+        public void benchmark() {
+            String ret = null;
+            try {
+
+                for (int i = 0; i < events; i++) {
+                    final Instant startTime = Instant.now();
+                    ret = readData();
+                    if (ret != null) {
+                        stats.recordTime(null, startTime, ret.length());
+                    }
+                }
+            } finally {
+                close();
+            }
+        }
+    }
+
+    private class eventstimeReader implements performance {
+        public void benchmark() {
+            String ret = null;
+            try {
+
+                for (int i = 0; Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun; i++) {
+                    final Instant startTime = Instant.now();
+                    ret = readData();
+                    if (ret != null) {
+                        stats.recordTime(null, startTime, ret.length());
+                    }
+                }
+            } finally {
+                close();
+            }
+        }
     }
 }

@@ -26,8 +26,6 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 import java.time.Instant;
-import java.util.Random;
-import java.util.concurrent.CompletableFuture;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -35,26 +33,15 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.TreeMap;
 import java.util.stream.Stream;
 import java.util.stream.IntStream;
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.AbstractMap.SimpleImmutableEntry;
 
 /**
  * Performance benchmark for Pravega.
@@ -70,18 +57,17 @@ public class PravegaPerfTest {
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
-    private static int eventsPerWorker = 3000;
+    private static int events = 3000;
     private static boolean isTransaction = false;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 1;
-    private static int runtimeSec = (60 * 60 * 24);
+    private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool fjexecutor;
     private static PerfStats produceStats, consumeStats;
 
     public static void main(String[] args) {
-
         ReaderGroup readerGroup = null;
         final int timeout = 10;
         final ClientFactory factory;
@@ -129,10 +115,10 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * eventsPerWorker);
+                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1));
                 readers = IntStream.range(0, consumerCount)
                                    .boxed()
-                                   .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
+                                   .map(i -> new PravegaReaderWorker(i, events,
                                            runtimeSec, StartTime, consumeStats,
                                            streamName, timeout, factory))
                                    .collect(Collectors.toList());
@@ -143,11 +129,11 @@ public class PravegaPerfTest {
 
             if (producerCount > 0) {
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * eventsPerWorker);
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1));
                 if (isTransaction) {
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
-                                       .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
+                                       .map(i -> new PravegaTransactionWriterWorker(i, events,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
@@ -156,7 +142,7 @@ public class PravegaPerfTest {
                 } else {
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
-                                       .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
+                                       .map(i -> new PravegaWriterWorker(i, events,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
@@ -179,14 +165,13 @@ public class PravegaPerfTest {
                         System.out.println();
                         shutdown();
                     } catch (InterruptedException e) {
-                         e.printStackTrace();
+                        e.printStackTrace();
                     }
                 }
             });
 
             fjexecutor.invokeAll(workers);
             shutdown();
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -194,7 +179,7 @@ public class PravegaPerfTest {
         System.exit(0);
     }
 
-    private static synchronized  void shutdown() throws InterruptedException {
+    private static synchronized void shutdown() throws InterruptedException {
         Instant endTime;
         if (fjexecutor == null) {
             return;
@@ -221,15 +206,21 @@ public class PravegaPerfTest {
         options.addOption("controller", true, "controller URI");
         options.addOption("producers", true, "number of producers");
         options.addOption("consumers", true, "number of consumers");
-        options.addOption("events", true, "number of events/records per producer/consumer");
+        options.addOption("events", true,
+                "number of events/records per producer/consumer if 'time' not specified;\n" +
+                        "otherwise, maximum events per second by a single producer" +
+                        "and/or number of events per consumer");
         options.addOption("time", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("stream", true, "Stream name");
-        options.addOption("randomkey", true, "Set Random key default is one key per producer");
-        options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
+        options.addOption("randomkey", true,
+                "Set Random key default is one key per producer");
+        options.addOption("transactionspercommit", true,
+                "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
-        options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
+        options.addOption("recreate", true,
+                "If the stream is already existing, delete it and recreate it");
 
         options.addOption("help", false, "Help message");
 
@@ -255,7 +246,7 @@ public class PravegaPerfTest {
             }
 
             if (commandline.hasOption("events")) {
-                eventsPerWorker = Integer.parseInt(commandline.getOptionValue("events"));
+                events = Integer.parseInt(commandline.getOptionValue("events"));
             }
 
             if (commandline.hasOption("time")) {
