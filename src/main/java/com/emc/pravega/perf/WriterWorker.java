@@ -101,7 +101,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         eventspersecWriter() {
             sleep_ns = NS_PER_SEC / events;
             sleep_ms = sleep_ns / NS_PER_MS;
-            remain_ns = sleep_ms > 0 ? sleep_ns % NS_PER_MS : sleep_ns;
+            remain_ns = sleep_ns - sleep_ms * NS_PER_MS;
         }
 
         public void benchmark() throws InterruptedException, ExecutionException {
