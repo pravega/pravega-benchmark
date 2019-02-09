@@ -93,36 +93,39 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
     private class eventspersecWriter implements performance {
+        private static final long NS_PER_MS = 1000000L;
+        private static final long NS_PER_SEC = 1000 * NS_PER_MS;
+        private static final long MIN_SLEEP_NS = 100000L;
+        private final long sleep_ns, sleep_ms, remain_ns;
+
+        eventspersecWriter() {
+            sleep_ns = NS_PER_SEC / events;
+            sleep_ms = sleep_ns / NS_PER_MS;
+            remain_ns = sleep_ms > 0 ? sleep_ns % NS_PER_MS : sleep_ns;
+        }
 
         public void benchmark() throws InterruptedException, ExecutionException {
             CompletableFuture retFuture = null;
             Random rand = new Random();
 
             while (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) {
-                final Instant loopStart = Instant.now();
-                long loopTime;
-
-                for (int i = 0; ((loopTime = Duration.between(loopStart, Instant.now()).toMillis()) < 1000) &&
-                        (i < events); i++) {
-
-                    // Construct event payload
-                    String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                    String payload = String.format("%-" + messageSize + "s", val);
-                    String key;
-                    if (isRandomKey) {
-                        key = Integer.toString(workerID + rand.nextInt());
-                    } else {
-                        key = Integer.toString(workerID);
-                    }
-
-                    final Instant startTime = Instant.now();
-                    retFuture = writeData(key, payload);
-                    // event ingestion
-                    retFuture = stats.recordTime(retFuture, startTime, payload.length());
+                // Construct event payload
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+                String payload = String.format("%-" + messageSize + "s", val);
+                String key;
+                if (isRandomKey) {
+                    key = Integer.toString(workerID + rand.nextInt());
+                } else {
+                    key = Integer.toString(workerID);
                 }
 
-                if (loopTime < 1000) {
-                    TimeUnit.MILLISECONDS.sleep(1000 - loopTime);
+                final Instant beginTime = Instant.now();
+                retFuture = writeData(key, payload);
+                // event ingestion
+                retFuture = stats.recordTime(retFuture, beginTime, payload.length());
+
+                if (sleep_ns > MIN_SLEEP_NS) {
+                    Thread.sleep(sleep_ms, (int) remain_ns);
                 }
             }
 
