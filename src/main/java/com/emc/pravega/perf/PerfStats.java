@@ -151,4 +151,13 @@ public class PerfStats {
         }
         return retVal;
     }
+
+    /**
+     * get the number of events.
+     *
+     * @return number of events written/read till now.
+     */
+    public synchronized long eventsTillNow() {
+        return this.count;
+    }
 }

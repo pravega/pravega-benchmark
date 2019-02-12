@@ -8,7 +8,7 @@
  * with the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,11 +39,11 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, Instant start,
-                                   PerfStats stats, String streamName,
+                                   PerfStats stats, String streamName, ThroughputController tput,
                                    ClientFactory factory, int transactionsPerCommit) {
 
         super(sensorId, events, secondsToRun, isRandomKey,
-                messageSize, start, stats, streamName, factory);
+                messageSize, start, stats, streamName, tput, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
         eventCount = 0;
@@ -53,7 +53,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @Override
     public CompletableFuture writeData(String key, String data) {
         try {
-             synchronized (this) {
+            synchronized (this) {
                 transaction.writeEvent(key, data);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {

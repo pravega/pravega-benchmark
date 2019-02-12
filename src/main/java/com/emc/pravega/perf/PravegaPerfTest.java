@@ -58,14 +58,15 @@ public class PravegaPerfTest {
     private static int consumerCount = 0;
     private static int segmentCount = 0;
     private static int events = 3000;
-    private static boolean isTransaction = false;
     private static boolean isRandomKey = false;
-    private static int transactionPerCommit = 1;
+    private static int transactionPerCommit = 0;
     private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool fjexecutor;
     private static PerfStats produceStats, consumeStats;
+    private static double throughput = 0;
+    private static ThroughputController tput;
 
     public static void main(String[] args) {
         ReaderGroup readerGroup = null;
@@ -130,14 +131,21 @@ public class PravegaPerfTest {
             if (producerCount > 0) {
 
                 produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1));
-                if (isTransaction) {
+                if (throughput == 0 && runtimeSec > 0) {
+                    tput = new ThroughputController(StartTime, events);
+                } else {
+                    tput = new ThroughputController(StartTime, messageSize, throughput);
+                }
+
+                if (transactionPerCommit > 0) {
                     writers = IntStream.range(0, producerCount)
                                        .boxed()
                                        .map(i -> new PravegaTransactionWriterWorker(i, events,
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
-                                               factory, transactionPerCommit))
+                                               tput, factory,
+                                               transactionPerCommit))
                                        .collect(Collectors.toList());
                 } else {
                     writers = IntStream.range(0, producerCount)
@@ -146,7 +154,7 @@ public class PravegaPerfTest {
                                                runtimeSec, isRandomKey,
                                                messageSize, StartTime,
                                                produceStats, streamName,
-                                               factory))
+                                               tput, factory))
                                        .collect(Collectors.toList());
                 }
             } else {
@@ -208,7 +216,7 @@ public class PravegaPerfTest {
         options.addOption("consumers", true, "number of consumers");
         options.addOption("events", true,
                 "number of events/records per producer/consumer if 'time' not specified;\n" +
-                        "otherwise, maximum events per second by a single producer" +
+                        "otherwise, maximum events per second by producer(s)" +
                         "and/or number of events per consumer");
         options.addOption("time", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
@@ -222,6 +230,10 @@ public class PravegaPerfTest {
         options.addOption("recreate", true,
                 "If the stream is already existing, delete it and recreate it");
 
+        options.addOption("throughput", true,
+                "if > 0 , throughput in MB/s\n" +
+                        "if 0 , writes 'events'\n" +
+                        "if -1, get the maximum throughput");
         options.addOption("help", false, "Help message");
 
         parser = new BasicParser();
@@ -253,10 +265,6 @@ public class PravegaPerfTest {
                 runtimeSec = Integer.parseInt(commandline.getOptionValue("time"));
             }
 
-            if (commandline.hasOption("transaction")) {
-                isTransaction = Boolean.parseBoolean(commandline.getOptionValue("transaction"));
-            }
-
             if (commandline.hasOption("size")) {
                 messageSize = Integer.parseInt(commandline.getOptionValue("size"));
             }
@@ -281,6 +289,10 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("recreate")) {
                 recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+            }
+
+            if (commandline.hasOption("throughput")) {
+                throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
             }
         }
     }

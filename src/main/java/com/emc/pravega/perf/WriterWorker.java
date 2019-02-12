@@ -31,15 +31,17 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private performance perf;
+    final private ThroughputController tput;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, Instant start,
-                 PerfStats stats, String streamName) {
+                 PerfStats stats, String streamName, ThroughputController tput) {
 
         super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
                 stats, streamName, 0);
-        perf = secondsToRun > 0 ? new eventspersecWriter() : new eventsWriter();
+        this.tput = tput;
+        perf = secondsToRun > 0 ? new throughputWriter() : new eventsWriter();
     }
 
     /**
@@ -83,6 +85,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, startTime, payload.length());
+
+                if (tput.needControl(stats.eventsTillNow(), Instant.now())) {
+                    tput.control();
+                }
             }
 
             flush();
@@ -92,17 +98,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         }
     }
 
-    private class eventspersecWriter implements performance {
-        private static final long NS_PER_MS = 1000000L;
-        private static final long NS_PER_SEC = 1000 * NS_PER_MS;
-        private static final long MIN_SLEEP_NS = 100000L;
-        private final long sleep_ns, sleep_ms, remain_ns;
-
-        eventspersecWriter() {
-            sleep_ns = NS_PER_SEC / events;
-            sleep_ms = sleep_ns / NS_PER_MS;
-            remain_ns = sleep_ns - sleep_ms * NS_PER_MS;
-        }
+    private class throughputWriter implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException {
             CompletableFuture retFuture = null;
@@ -124,8 +120,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, beginTime, payload.length());
 
-                if (sleep_ns > MIN_SLEEP_NS) {
-                    Thread.sleep(sleep_ms, (int) remain_ns);
+                if (tput.needControl(stats.eventsTillNow(), Instant.now())) {
+                    tput.control();
                 }
             }
 
