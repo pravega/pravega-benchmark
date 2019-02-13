@@ -73,9 +73,6 @@ public class PerfStats {
          */
         public void record(Instant start, Instant end, long bytes) {
             final long latency = Duration.between(start, end).toMillis();
-            if (this.count == 0) {
-                this.startTime = start;
-            }
             this.lastTime = end;
             this.count++;
             this.totalLatency += latency;
