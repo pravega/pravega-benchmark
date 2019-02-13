@@ -23,7 +23,6 @@ import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
-
 /**
  * abstract class for Readers.
  */
@@ -59,13 +58,13 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         public void benchmark() {
             String ret = null;
             try {
-
                 for (int i = 0; i < events; i++) {
                     final Instant startTime = Instant.now();
                     ret = readData();
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());
                     }
+                    stats.print();
                 }
             } finally {
                 close();
@@ -84,6 +83,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());
                     }
+                    stats.print();
                 }
             } finally {
                 close();

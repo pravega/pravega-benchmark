@@ -195,11 +195,11 @@ public class PravegaPerfTest {
         fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
         fjexecutor = null;
         if (produceStats != null) {
-            produceStats.print();
+            produceStats.printTotal();
         }
 
         if (consumeStats != null) {
-            consumeStats.print();
+            consumeStats.printTotal();
         }
     }
 

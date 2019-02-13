@@ -40,7 +40,7 @@ public class PerfStats {
     private long bytes;
     private long maxLatency;
     private long totalLatency;
-    final private long reportingInterval;
+    final private long windowInterval;
     private timeWindow window;
     private ReentrantLock lock;
 
@@ -125,7 +125,7 @@ public class PerfStats {
         this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
-        this.reportingInterval = reportingInterval;
+        this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
         this.window = new timeWindow();
         this.lock = new ReentrantLock();
@@ -146,12 +146,6 @@ public class PerfStats {
                 this.latencies[index] = latency;
                 this.index++;
             }
-
-            /* did we arrived at reporting time */
-            if (window.windowTimeMS(Instant.now()) >= reportingInterval) {
-                window.print();
-                this.window = new timeWindow();
-            }
         } finally {
             this.lock.unlock();
         }
@@ -169,9 +163,24 @@ public class PerfStats {
     }
 
     /**
-     * print the final performance statistics.
+     * print the performance statistics of current time window.
      */
     public void print() {
+        this.lock.lock();
+        try {
+            if (window.windowTimeMS(Instant.now()) >= windowInterval) {
+                window.print();
+                this.window = new timeWindow();
+            }
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    /**
+     * print the final performance statistics.
+     */
+    public void printTotal() {
         this.lock.lock();
         try {
             final double elapsed = Duration.between(start, end).toMillis() / 1000.0;

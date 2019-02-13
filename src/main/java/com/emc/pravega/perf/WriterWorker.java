@@ -85,8 +85,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, startTime, payload.length());
-
+                stats.print();
                 tput.control(stats.eventsRate());
+
             }
 
             flush();
@@ -117,7 +118,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, beginTime, payload.length());
-
+                stats.print();
                 tput.control(stats.eventsRate());
             }
 
