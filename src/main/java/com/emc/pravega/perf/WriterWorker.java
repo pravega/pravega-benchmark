@@ -86,9 +86,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, startTime, payload.length());
 
-                if (tput.needControl(stats.eventsTillNow(), Instant.now())) {
-                    tput.control();
-                }
+                tput.control(stats.eventsRate());
             }
 
             flush();
@@ -120,9 +118,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, beginTime, payload.length());
 
-                if (tput.needControl(stats.eventsTillNow(), Instant.now())) {
-                    tput.control();
-                }
+                tput.control(stats.eventsRate());
             }
 
             flush();

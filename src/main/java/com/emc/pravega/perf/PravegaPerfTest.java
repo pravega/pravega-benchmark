@@ -132,9 +132,9 @@ public class PravegaPerfTest {
 
                 produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1));
                 if (throughput == 0 && runtimeSec > 0) {
-                    tput = new ThroughputController(StartTime, events);
+                    tput = new ThroughputController(events);
                 } else {
-                    tput = new ThroughputController(StartTime, messageSize, throughput);
+                    tput = new ThroughputController(messageSize, throughput);
                 }
 
                 if (transactionPerCommit > 0) {
@@ -188,20 +188,18 @@ public class PravegaPerfTest {
     }
 
     private static synchronized void shutdown() throws InterruptedException {
-        Instant endTime;
         if (fjexecutor == null) {
             return;
         }
         fjexecutor.shutdown();
         fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
         fjexecutor = null;
-        endTime = Instant.now();
         if (produceStats != null) {
-            produceStats.printTotal(endTime);
+            produceStats.print();
         }
 
         if (consumeStats != null) {
-            consumeStats.printTotal(endTime);
+            consumeStats.print();
         }
     }
 
