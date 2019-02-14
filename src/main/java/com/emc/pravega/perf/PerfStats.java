@@ -32,7 +32,6 @@ public class PerfStats {
     final private int messageSize;
     final private String action;
     final private Instant start;
-    private Instant end;
     private long[] latencies;
     private int sampling;
     private int index;
@@ -110,7 +109,6 @@ public class PerfStats {
     public PerfStats(String action, int reportingInterval, int messageSize, long numRecords) {
         this.action = action;
         this.start = Instant.now();
-        this.end = this.start;
         this.count = 0;
         this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
         this.latencies = new long[(int) (numRecords / this.sampling) + 1];
@@ -175,8 +173,7 @@ public class PerfStats {
     public void printTotal(Instant endTime) {
         this.lock.lock();
         try {
-            this.end = endTime;
-            final double elapsed = Duration.between(start, end).toMillis() / 1000.0;
+            final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
@@ -220,7 +217,7 @@ public class PerfStats {
         int rate = 0;
         this.lock.lock();
         try {
-            final double elapsed = Duration.between(start, end).toMillis() / 1000.0;
+            final double elapsed = Duration.between(start, Instant.now()).toMillis() / 1000.0;
             rate = (int) (count / elapsed);
         } finally {
             this.lock.unlock();
