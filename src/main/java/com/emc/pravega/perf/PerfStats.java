@@ -159,8 +159,9 @@ public class PerfStats {
     public void print() {
         this.lock.lock();
         try {
-            if (window.windowTimeMS(Instant.now()) >= windowInterval) {
-                window.print(Instant.now());
+            final Instant time=Instant.now();
+            if (window.windowTimeMS(time) >= windowInterval) {
+                window.print(time);
                 this.window = new timeWindow();
             }
         } finally {
