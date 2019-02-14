@@ -48,7 +48,7 @@ public class PerfStats {
      * private class for Performance statistics within a given time window.
      */
     private class timeWindow {
-        private Instant startTime;
+        final private Instant startTime;
         private Instant lastTime;
         private long count;
         private long bytes;
@@ -57,7 +57,7 @@ public class PerfStats {
 
         public timeWindow() {
             this.startTime = Instant.now();
-            this.lastTime = startTime;
+            this.lastTime = this.startTime;
             this.count = 0;
             this.bytes = 0;
             this.maxLatency = 0;
@@ -67,13 +67,10 @@ public class PerfStats {
         /**
          * record the latency and bytes
          *
-         * @param start start time.
-         * @param end   end time
-         * @param bytes number of bytes.
+         * @param latency latency in ms.
+         * @param bytes   number of bytes.
          */
-        public void record(Instant start, Instant end, long bytes) {
-            final long latency = Duration.between(start, end).toMillis();
-            this.lastTime = end;
+        public void record(long latency, long bytes) {
             this.count++;
             this.totalLatency += latency;
             this.bytes += bytes;
@@ -83,7 +80,8 @@ public class PerfStats {
         /**
          * print the window statistics
          */
-        public void print() {
+        public void print(Instant time) {
+            this.lastTime = time;
             final double elapsed = Duration.between(this.startTime, this.lastTime).toMillis() / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
@@ -98,17 +96,14 @@ public class PerfStats {
          * @param time current time.
          */
         public long windowTimeMS(Instant time) {
-            if (this.startTime != null && time != null) {
-                return Duration.between(this.startTime, time).toMillis();
-            }
-            return 0;
+            return Duration.between(this.startTime, time).toMillis();
         }
 
         /**
          * get the time duration of this window
          */
         public long windowTimeMS() {
-            return windowTimeMS(this.lastTime);
+            return windowTimeMS(Instant.now());
         }
     }
 
@@ -132,12 +127,11 @@ public class PerfStats {
         this.lock.lock();
         try {
             final long latency = Duration.between(startTime, endTime).toMillis();
-            window.record(startTime, endTime, bytes);
             this.count++;
-            this.end = endTime;
             this.bytes += bytes;
             this.totalLatency += latency;
             this.maxLatency = Math.max(this.maxLatency, latency);
+            window.record(latency, bytes);
 
             if (this.count % this.sampling == 0) {
                 this.latencies[index] = latency;
@@ -166,7 +160,7 @@ public class PerfStats {
         this.lock.lock();
         try {
             if (window.windowTimeMS(Instant.now()) >= windowInterval) {
-                window.print();
+                window.print(Instant.now());
                 this.window = new timeWindow();
             }
         } finally {
@@ -177,9 +171,10 @@ public class PerfStats {
     /**
      * print the final performance statistics.
      */
-    public void printTotal() {
+    public void printTotal(Instant endTime) {
         this.lock.lock();
         try {
+            this.end = endTime;
             final double elapsed = Duration.between(start, end).toMillis() / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;

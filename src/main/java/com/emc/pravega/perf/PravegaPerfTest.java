@@ -188,6 +188,7 @@ public class PravegaPerfTest {
     }
 
     private static synchronized void shutdown() throws InterruptedException {
+        final Instant endTime=Instant.now();
         if (fjexecutor == null) {
             return;
         }
@@ -195,11 +196,11 @@ public class PravegaPerfTest {
         fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
         fjexecutor = null;
         if (produceStats != null) {
-            produceStats.printTotal();
+            produceStats.printTotal(endTime);
         }
 
         if (consumeStats != null) {
-            consumeStats.printTotal();
+            consumeStats.printTotal(endTime);
         }
     }
 
