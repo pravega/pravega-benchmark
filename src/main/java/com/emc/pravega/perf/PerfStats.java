@@ -41,7 +41,6 @@ public class PerfStats {
     private long totalLatency;
     final private long windowInterval;
     private timeWindow window;
-    private ReentrantLock lock;
 
     /**
      * private class for Performance statistics within a given time window.
@@ -118,25 +117,20 @@ public class PerfStats {
         this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
         this.window = new timeWindow();
-        this.lock = new ReentrantLock();
     }
 
-    private void record(int bytes, Instant startTime, Instant endTime) {
-        this.lock.lock();
-        try {
-            final long latency = Duration.between(startTime, endTime).toMillis();
-            this.count++;
-            this.bytes += bytes;
-            this.totalLatency += latency;
-            this.maxLatency = Math.max(this.maxLatency, latency);
-            window.record(latency, bytes);
+    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
 
-            if (this.count % this.sampling == 0) {
-                this.latencies[index] = latency;
-                this.index++;
-            }
-        } finally {
-            this.lock.unlock();
+        final long latency = Duration.between(startTime, endTime).toMillis();
+        this.count++;
+        this.bytes += bytes;
+        this.totalLatency += latency;
+        this.maxLatency = Math.max(this.maxLatency, latency);
+        window.record(latency, bytes);
+
+        if (this.count % this.sampling == 0) {
+            this.latencies[index] = latency;
+            this.index++;
         }
     }
 
@@ -154,37 +148,29 @@ public class PerfStats {
     /**
      * print the performance statistics of current time window.
      */
-    public void print() {
-        this.lock.lock();
-        try {
-            final Instant time=Instant.now();
-            if (window.windowTimeMS(time) >= windowInterval) {
-                window.print(time);
-                this.window = new timeWindow();
-            }
-        } finally {
-            this.lock.unlock();
+    public synchronized void print() {
+
+        final Instant time = Instant.now();
+        if (window.windowTimeMS(time) >= windowInterval) {
+            window.print(time);
+            this.window = new timeWindow();
         }
     }
 
     /**
      * print the final performance statistics.
      */
-    public void printTotal(Instant endTime) {
-        this.lock.lock();
-        try {
-            final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
-            final double recsPerSec = count / elapsed;
-            final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+    public synchronized void printTotal(Instant endTime) {
 
-            long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
-            System.out.printf(
-                    "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
-                    count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
-                    percs[0], percs[1], percs[2], percs[3]);
-        } finally {
-            this.lock.unlock();
-        }
+        final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
+        final double recsPerSec = count / elapsed;
+        final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+
+        long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
+        System.out.printf(
+                "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
+                percs[0], percs[1], percs[2], percs[3]);
     }
 
     /**
@@ -213,15 +199,8 @@ public class PerfStats {
      *
      * @return rate of number of events till now.
      */
-    public int eventsRate() {
-        int rate = 0;
-        this.lock.lock();
-        try {
-            final double elapsed = Duration.between(start, Instant.now()).toMillis() / 1000.0;
-            rate = (int) (count / elapsed);
-        } finally {
-            this.lock.unlock();
-        }
-        return rate;
+    public synchronized int eventsRate() {
+        final double elapsed = Duration.between(start, Instant.now()).toMillis() / 1000.0;
+        return (int) (count / elapsed);
     }
 }
