@@ -17,10 +17,17 @@
  */
 package com.emc.pravega.perf;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 
 
 /**
@@ -39,6 +46,8 @@ public class PerfStats {
     private long totalLatency;
     final private long windowInterval;
     private timeWindow window;
+    final private AtomicLong eventID;
+    final private CSVPrinter printer;
 
     /**
      * private class for Performance statistics within a given time window.
@@ -103,7 +112,7 @@ public class PerfStats {
         }
     }
 
-    public PerfStats(String action, int reportingInterval, int messageSize, long numRecords) {
+    public PerfStats(String action, int reportingInterval, int messageSize, long numRecords, String csvFile) throws IOException {
         this.action = action;
         this.start = Instant.now();
         this.count = 0;
@@ -115,9 +124,17 @@ public class PerfStats {
         this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
         this.window = new timeWindow();
+        this.eventID = new AtomicLong();
+        if (csvFile != null) {
+            this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
+                    .withHeader("#", "Event ID", "event size (bytes)", action + " Latency (milliseconds)"));
+        } else {
+            this.printer = null;
+        }
+
     }
 
-    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
+    private synchronized void record(long event, int bytes, Instant startTime, Instant endTime) throws IOException {
 
         final long latency = Duration.between(startTime, endTime).toMillis();
         this.count++;
@@ -129,6 +146,10 @@ public class PerfStats {
         if (this.count % this.sampling == 0) {
             this.latencies[index] = latency;
             this.index++;
+        }
+
+        if (this.printer != null) {
+            printer.printRecord(count, event, bytes, latency);
         }
     }
 
@@ -146,19 +167,22 @@ public class PerfStats {
     /**
      * print the performance statistics of current time window.
      */
-    public synchronized void print() {
+    public synchronized void print() throws IOException {
 
         final Instant time = Instant.now();
         if (window.windowTimeMS(time) >= windowInterval) {
             window.print(time);
             this.window = new timeWindow();
+            if (printer != null) {
+                printer.flush();
+            }
         }
     }
 
     /**
      * print the final performance statistics.
      */
-    public synchronized void printTotal(Instant endTime) {
+    public synchronized void printTotal(Instant endTime) throws IOException {
 
         final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
         final double recsPerSec = count / elapsed;
@@ -169,6 +193,9 @@ public class PerfStats {
                 "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
                 count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
                 percs[0], percs[1], percs[2], percs[3]);
+        if (printer != null) {
+            printer.close();
+        }
     }
 
     /**
@@ -179,14 +206,19 @@ public class PerfStats {
      * @param length    length of data read/written
      * @return a completable future for recording the end time.
      */
-    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) {
+    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) throws IOException {
+        final Instant time = Instant.now();
+        final long event = eventID.incrementAndGet();
         if (retVal == null) {
-            final Instant endTime = Instant.now();
-            record(length, startTime, endTime);
+            record(event, length, startTime, time);
         } else {
             retVal = retVal.thenAccept(d -> {
                 final Instant endTime = Instant.now();
-                record(length, startTime, endTime);
+                try {
+                    record(event, length, startTime, endTime);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
             });
         }
         return retVal;

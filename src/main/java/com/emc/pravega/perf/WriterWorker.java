@@ -18,6 +18,7 @@
 
 package com.emc.pravega.perf;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Random;
@@ -57,14 +58,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract void flush();
 
     @Override
-    public Void call() throws InterruptedException, ExecutionException {
+    public Void call() throws InterruptedException, ExecutionException, IOException {
         perf.benchmark();
         return null;
     }
 
     private class eventsWriter implements performance {
 
-        public void benchmark() throws InterruptedException, ExecutionException {
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
             CompletableFuture retFuture = null;
             Random rand = new Random();
 
@@ -98,7 +99,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     private class throughputWriter implements performance {
 
-        public void benchmark() throws InterruptedException, ExecutionException {
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
             CompletableFuture retFuture = null;
             Random rand = new Random();
 

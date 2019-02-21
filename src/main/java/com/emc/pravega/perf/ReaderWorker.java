@@ -18,6 +18,7 @@
 
 package com.emc.pravega.perf;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
@@ -48,14 +49,14 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     public abstract void close();
 
     @Override
-    public Void call() throws InterruptedException, ExecutionException {
+    public Void call() throws InterruptedException, ExecutionException, IOException {
         perf.benchmark();
         return null;
     }
 
     private class eventsReader implements performance {
 
-        public void benchmark() {
+        public void benchmark() throws IOException {
             String ret = null;
             try {
                 for (int i = 0; i < events; i++) {
@@ -73,7 +74,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     }
 
     private class eventstimeReader implements performance {
-        public void benchmark() {
+        public void benchmark() throws IOException {
             String ret = null;
             try {
 

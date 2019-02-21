@@ -26,6 +26,7 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 
+import java.io.IOException;
 import java.time.Instant;
 
 import org.apache.commons.cli.BasicParser;
@@ -70,6 +71,8 @@ public class PravegaPerfTest {
     private static PerfStats produceStats, consumeStats;
     private static double throughput = 0;
     private static ThroughputController tput;
+    private static String writeFile = null;
+    private static String readFile = null;
 
     public static void main(String[] args) {
         ReaderGroup readerGroup = null;
@@ -119,7 +122,7 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1));
+                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1), readFile);
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, events,
@@ -133,7 +136,7 @@ public class PravegaPerfTest {
 
             if (producerCount > 0) {
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1));
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1), writeFile);
                 if (throughput == 0 && runtimeSec > 0) {
                     tput = new ThroughputController(events);
                 } else {
@@ -175,7 +178,7 @@ public class PravegaPerfTest {
                     try {
                         System.out.println();
                         shutdown();
-                    } catch (InterruptedException e) {
+                    } catch (InterruptedException | IOException e) {
                         e.printStackTrace();
                     }
                 }
@@ -190,7 +193,7 @@ public class PravegaPerfTest {
         System.exit(0);
     }
 
-    private static synchronized void shutdown() throws InterruptedException {
+    private static synchronized void shutdown() throws InterruptedException, IOException {
         final Instant endTime = Instant.now();
         if (fjexecutor == null) {
             return;
@@ -236,6 +239,9 @@ public class PravegaPerfTest {
                 "if > 0 , throughput in MB/s\n" +
                         "if 0 , writes 'events'\n" +
                         "if -1, get the maximum throughput");
+        options.addOption("writecsv", true, "csv file to record write latencies");
+        options.addOption("readcsv", true, "csv file to record read latencies");
+
         options.addOption("help", false, "Help message");
 
         parser = new BasicParser();
@@ -295,6 +301,12 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("throughput")) {
                 throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
+            }
+            if (commandline.hasOption("writecsv")) {
+                writeFile = commandline.getOptionValue("writecsv");
+            }
+            if (commandline.hasOption("readcsv")) {
+                readFile = commandline.getOptionValue("readcsv");
             }
         }
     }
