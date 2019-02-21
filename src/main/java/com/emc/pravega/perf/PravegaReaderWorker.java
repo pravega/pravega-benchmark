@@ -19,6 +19,7 @@
 package com.emc.pravega.perf;
 
 import java.time.Instant;
+
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.impl.UTF8StringSerializer;

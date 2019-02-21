@@ -25,13 +25,16 @@ import io.pravega.client.stream.ReinitializationRequiredException;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
+
 import java.time.Instant;
+
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
+
 import java.net.URI;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -94,9 +97,9 @@ public class PravegaPerfTest {
         try {
 
             controller = new ControllerImpl(ControllerImplConfig.builder()
-                                                                .clientConfig(ClientConfig.builder()
-                                                                                          .controllerURI(new URI(controllerUri)).build())
-                                                                .maxBackoffMillis(5000).build(),
+                    .clientConfig(ClientConfig.builder()
+                            .controllerURI(new URI(controllerUri)).build())
+                    .maxBackoffMillis(5000).build(),
                     bgexecutor);
 
             PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
@@ -118,11 +121,11 @@ public class PravegaPerfTest {
                 readerGroup = streamHandle.createReaderGroup();
                 consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1));
                 readers = IntStream.range(0, consumerCount)
-                                   .boxed()
-                                   .map(i -> new PravegaReaderWorker(i, events,
-                                           runtimeSec, StartTime, consumeStats,
-                                           streamName, timeout, factory))
-                                   .collect(Collectors.toList());
+                        .boxed()
+                        .map(i -> new PravegaReaderWorker(i, events,
+                                runtimeSec, StartTime, consumeStats,
+                                streamName, timeout, factory))
+                        .collect(Collectors.toList());
             } else {
                 readers = null;
                 consumeStats = null;
@@ -139,23 +142,23 @@ public class PravegaPerfTest {
 
                 if (transactionPerCommit > 0) {
                     writers = IntStream.range(0, producerCount)
-                                       .boxed()
-                                       .map(i -> new PravegaTransactionWriterWorker(i, events,
-                                               runtimeSec, isRandomKey,
-                                               messageSize, StartTime,
-                                               produceStats, streamName,
-                                               tput, factory,
-                                               transactionPerCommit))
-                                       .collect(Collectors.toList());
+                            .boxed()
+                            .map(i -> new PravegaTransactionWriterWorker(i, events,
+                                    runtimeSec, isRandomKey,
+                                    messageSize, StartTime,
+                                    produceStats, streamName,
+                                    tput, factory,
+                                    transactionPerCommit))
+                            .collect(Collectors.toList());
                 } else {
                     writers = IntStream.range(0, producerCount)
-                                       .boxed()
-                                       .map(i -> new PravegaWriterWorker(i, events,
-                                               runtimeSec, isRandomKey,
-                                               messageSize, StartTime,
-                                               produceStats, streamName,
-                                               tput, factory))
-                                       .collect(Collectors.toList());
+                            .boxed()
+                            .map(i -> new PravegaWriterWorker(i, events,
+                                    runtimeSec, isRandomKey,
+                                    messageSize, StartTime,
+                                    produceStats, streamName,
+                                    tput, factory))
+                            .collect(Collectors.toList());
                 }
             } else {
                 writers = null;
@@ -163,9 +166,9 @@ public class PravegaPerfTest {
             }
 
             final List<Callable<Void>> workers = Stream.of(readers, writers)
-                                                       .filter(x -> x != null)
-                                                       .flatMap(x -> x.stream())
-                                                       .collect(Collectors.toList());
+                    .filter(x -> x != null)
+                    .flatMap(x -> x.stream())
+                    .collect(Collectors.toList());
 
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 public void run() {
@@ -188,7 +191,7 @@ public class PravegaPerfTest {
     }
 
     private static synchronized void shutdown() throws InterruptedException {
-        final Instant endTime=Instant.now();
+        final Instant endTime = Instant.now();
         if (fjexecutor == null) {
             return;
         }

@@ -21,9 +21,7 @@ import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
 import java.time.Duration;
-import java.util.concurrent.locks.ReentrantLock;
-import io.pravega.client.stream.TxnFailedException;
-import io.pravega.client.stream.ReinitializationRequiredException;
+
 
 /**
  * class for Performance statistics.
@@ -186,7 +184,7 @@ public class PerfStats {
             final Instant endTime = Instant.now();
             record(length, startTime, endTime);
         } else {
-            retVal = retVal.thenAccept((d) -> {
+            retVal = retVal.thenAccept(d -> {
                 final Instant endTime = Instant.now();
                 record(length, startTime, endTime);
             });

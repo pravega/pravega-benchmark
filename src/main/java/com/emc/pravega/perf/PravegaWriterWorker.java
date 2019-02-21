@@ -20,6 +20,7 @@ package com.emc.pravega.perf;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
@@ -35,7 +36,7 @@ public class PravegaWriterWorker extends WriterWorker {
 
     PravegaWriterWorker(int sensorId, int events, int secondsToRun,
                         boolean isRandomKey, int messageSize, Instant start,
-                        PerfStats stats, String streamName, ThroughputController tput,ClientFactory factory) {
+                        PerfStats stats, String streamName, ThroughputController tput, ClientFactory factory) {
 
         super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
