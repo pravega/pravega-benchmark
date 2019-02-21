@@ -127,7 +127,7 @@ public class PerfStats {
         this.eventID = new AtomicLong();
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("#", "Event ID", "event size (bytes)", "Start Time", action + " Latency (milliseconds)"));
+                    .withHeader("#", "Event ID", "event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
         } else {
             this.printer = null;
         }
