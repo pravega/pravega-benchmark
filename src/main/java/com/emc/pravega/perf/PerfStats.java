@@ -127,7 +127,7 @@ public class PerfStats {
         this.eventID = new AtomicLong();
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("#", "Event ID", "event size (bytes)", action + " Latency (milliseconds)"));
+                    .withHeader("#", "Event ID", "event size (bytes)", "Start Time", action + " Latency (milliseconds)"));
         } else {
             this.printer = null;
         }
@@ -149,7 +149,8 @@ public class PerfStats {
         }
 
         if (this.printer != null) {
-            printer.printRecord(count, event, bytes, latency);
+            final long nanotime = startTime.getEpochSecond() * 1000000000L + startTime.getNano();
+            printer.printRecord(count, event, bytes, nanotime, latency);
         }
     }
 
