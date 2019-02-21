@@ -34,6 +34,7 @@ import org.apache.commons.csv.CSVPrinter;
  * class for Performance statistics.
  */
 public class PerfStats {
+    private static final long NANOSEC_PER_SEC = 1000000000L;
     final private int messageSize;
     final private String action;
     final private Instant start;
@@ -48,6 +49,7 @@ public class PerfStats {
     private timeWindow window;
     final private AtomicLong eventID;
     final private CSVPrinter printer;
+
 
     /**
      * private class for Performance statistics within a given time window.
@@ -149,7 +151,7 @@ public class PerfStats {
         }
 
         if (this.printer != null) {
-            final long nanotime = startTime.getEpochSecond() * 1000000000L + startTime.getNano();
+            final long nanotime = startTime.getEpochSecond() * NANOSEC_PER_SEC + startTime.getNano();
             printer.printRecord(count, event, bytes, nanotime, latency);
         }
     }
