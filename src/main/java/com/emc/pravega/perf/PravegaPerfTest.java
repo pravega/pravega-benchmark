@@ -25,36 +25,27 @@ import io.pravega.client.stream.ReinitializationRequiredException;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
+
+import java.io.IOException;
 import java.time.Instant;
-import java.util.Random;
-import java.util.concurrent.CompletableFuture;
+
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
+
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ForkJoinPool;
-import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.TreeMap;
 import java.util.stream.Stream;
 import java.util.stream.IntStream;
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.AbstractMap.SimpleImmutableEntry;
 
 /**
  * Performance benchmark for Pravega.
@@ -70,23 +61,25 @@ public class PravegaPerfTest {
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
-    private static int eventsPerWorker = 3000;
-    private static boolean isTransaction = false;
+    private static int events = 3000;
     private static boolean isRandomKey = false;
-    private static int transactionPerCommit = 1;
-    private static int runtimeSec = (60 * 60 * 24);
+    private static int transactionPerCommit = 0;
+    private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
+    private static ScheduledExecutorService bgexecutor;
+    private static ForkJoinPool fjexecutor;
+    private static PerfStats produceStats, consumeStats;
+    private static double throughput = 0;
+    private static ThroughputController tput;
+    private static String writeFile = null;
+    private static String readFile = null;
 
     public static void main(String[] args) {
-
-        Instant endTime;
         ReaderGroup readerGroup = null;
         final int timeout = 10;
         final ClientFactory factory;
         ControllerImpl controller = null;
-        ScheduledExecutorService bgexecutor;
-        ForkJoinPool fjexecutor;
-        final PerfStats produceStats, consumeStats, drainStats;
+
         final List<Callable<Void>> readers;
         final List<Callable<Void>> writers;
 
@@ -107,9 +100,9 @@ public class PravegaPerfTest {
         try {
 
             controller = new ControllerImpl(ControllerImplConfig.builder()
-                                                                .clientConfig(ClientConfig.builder()
-                                                                                          .controllerURI(new URI(controllerUri)).build())
-                                                                .maxBackoffMillis(5000).build(),
+                    .clientConfig(ClientConfig.builder()
+                            .controllerURI(new URI(controllerUri)).build())
+                    .maxBackoffMillis(5000).build(),
                     bgexecutor);
 
             PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
@@ -129,40 +122,46 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * eventsPerWorker);
+                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1), readFile);
                 readers = IntStream.range(0, consumerCount)
-                                   .boxed()
-                                   .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
-                                           runtimeSec, StartTime, consumeStats,
-                                           streamName, timeout, factory))
-                                   .collect(Collectors.toList());
+                        .boxed()
+                        .map(i -> new PravegaReaderWorker(i, events,
+                                runtimeSec, StartTime, consumeStats,
+                                streamName, timeout, factory))
+                        .collect(Collectors.toList());
             } else {
                 readers = null;
-                drainStats = null;
                 consumeStats = null;
             }
 
             if (producerCount > 0) {
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * eventsPerWorker);
-                if (isTransaction) {
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1), writeFile);
+                if (throughput == 0 && runtimeSec > 0) {
+                    tput = new ThroughputController(events);
+                } else {
+                    tput = new ThroughputController(messageSize, throughput);
+                }
+
+                if (transactionPerCommit > 0) {
                     writers = IntStream.range(0, producerCount)
-                                       .boxed()
-                                       .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
-                                               runtimeSec, isRandomKey,
-                                               messageSize, StartTime,
-                                               produceStats, streamName,
-                                               factory, transactionPerCommit))
-                                       .collect(Collectors.toList());
+                            .boxed()
+                            .map(i -> new PravegaTransactionWriterWorker(i, events,
+                                    runtimeSec, isRandomKey,
+                                    messageSize, StartTime,
+                                    produceStats, streamName,
+                                    tput, factory,
+                                    transactionPerCommit))
+                            .collect(Collectors.toList());
                 } else {
                     writers = IntStream.range(0, producerCount)
-                                       .boxed()
-                                       .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
-                                               runtimeSec, isRandomKey,
-                                               messageSize, StartTime,
-                                               produceStats, streamName,
-                                               factory))
-                                       .collect(Collectors.toList());
+                            .boxed()
+                            .map(i -> new PravegaWriterWorker(i, events,
+                                    runtimeSec, isRandomKey,
+                                    messageSize, StartTime,
+                                    produceStats, streamName,
+                                    tput, factory))
+                            .collect(Collectors.toList());
                 }
             } else {
                 writers = null;
@@ -170,25 +169,45 @@ public class PravegaPerfTest {
             }
 
             final List<Callable<Void>> workers = Stream.of(readers, writers)
-                                                       .filter(x -> x != null)
-                                                       .flatMap(x -> x.stream())
-                                                       .collect(Collectors.toList());
-            fjexecutor.invokeAll(workers);
-            fjexecutor.shutdown();
-            fjexecutor.awaitTermination(runtimeSec, TimeUnit.SECONDS);
-            endTime = Instant.now();
-            if (produceStats != null) {
-                produceStats.printTotal(endTime);
-            }
+                    .filter(x -> x != null)
+                    .flatMap(x -> x.stream())
+                    .collect(Collectors.toList());
 
-            if (consumeStats != null) {
-                consumeStats.printTotal(endTime);
-            }
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                public void run() {
+                    try {
+                        System.out.println();
+                        shutdown();
+                    } catch (InterruptedException | IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+            fjexecutor.invokeAll(workers);
+            shutdown();
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         System.exit(0);
+    }
+
+    private static synchronized void shutdown() throws InterruptedException, IOException {
+        final Instant endTime = Instant.now();
+        if (fjexecutor == null) {
+            return;
+        }
+        fjexecutor.shutdown();
+        fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
+        fjexecutor = null;
+        if (produceStats != null) {
+            produceStats.printTotal(endTime);
+        }
+
+        if (consumeStats != null) {
+            consumeStats.printTotal(endTime);
+        }
     }
 
     private static void parseCmdLine(String[] args) throws ParseException {
@@ -200,15 +219,28 @@ public class PravegaPerfTest {
         options.addOption("controller", true, "controller URI");
         options.addOption("producers", true, "number of producers");
         options.addOption("consumers", true, "number of consumers");
-        options.addOption("events", true, "number of events/records per producer/consumer");
+        options.addOption("events", true,
+                "number of events/records per producer/consumer if 'time' not specified;\n" +
+                        "otherwise, maximum events per second by producer(s)" +
+                        "and/or number of events per consumer");
         options.addOption("time", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("stream", true, "Stream name");
-        options.addOption("randomkey", true, "Set Random key default is one key per producer");
-        options.addOption("transactionspercommit", true, "Number of events before a transaction is committed");
+        options.addOption("randomkey", true,
+                "Set Random key default is one key per producer");
+        options.addOption("transactionspercommit", true,
+                "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
-        options.addOption("recreate", true, "If the stream is already existing, delete it and recreate it");
+        options.addOption("recreate", true,
+                "If the stream is already existing, delete it and recreate it");
+
+        options.addOption("throughput", true,
+                "if > 0 , throughput in MB/s\n" +
+                        "if 0 , writes 'events'\n" +
+                        "if -1, get the maximum throughput");
+        options.addOption("writecsv", true, "csv file to record write latencies");
+        options.addOption("readcsv", true, "csv file to record read latencies");
 
         options.addOption("help", false, "Help message");
 
@@ -234,15 +266,11 @@ public class PravegaPerfTest {
             }
 
             if (commandline.hasOption("events")) {
-                eventsPerWorker = Integer.parseInt(commandline.getOptionValue("events"));
+                events = Integer.parseInt(commandline.getOptionValue("events"));
             }
 
             if (commandline.hasOption("time")) {
                 runtimeSec = Integer.parseInt(commandline.getOptionValue("time"));
-            }
-
-            if (commandline.hasOption("transaction")) {
-                isTransaction = Boolean.parseBoolean(commandline.getOptionValue("transaction"));
             }
 
             if (commandline.hasOption("size")) {
@@ -269,6 +297,16 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("recreate")) {
                 recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+            }
+
+            if (commandline.hasOption("throughput")) {
+                throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
+            }
+            if (commandline.hasOption("writecsv")) {
+                writeFile = commandline.getOptionValue("writecsv");
+            }
+            if (commandline.hasOption("readcsv")) {
+                readFile = commandline.getOptionValue("readcsv");
             }
         }
     }

@@ -29,6 +29,7 @@ import java.util.stream.IntStream;
 import java.net.URISyntaxException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.admin.StreamManager;
 import io.pravega.client.stream.StreamConfiguration;
@@ -70,8 +71,8 @@ public class PravegaStreamHandler {
         streamManager = StreamManager.create(new URI(uri));
         streamManager.createScope(scope);
         streamconfig = StreamConfiguration.builder().scope(scope).streamName(stream)
-                                          .scalingPolicy(ScalingPolicy.fixed(segCount))
-                                          .build();
+                .scalingPolicy(ScalingPolicy.fixed(segCount))
+                .build();
     }
 
     boolean create() {
@@ -100,15 +101,15 @@ public class PravegaStreamHandler {
 
         final double keyRangeChunk = 1.0 / segCount;
         final Map<Double, Double> keyRanges = IntStream.range(0, segCount)
-                                                       .boxed()
-                                                       .collect(
-                                                               Collectors
-                                                                       .toMap(x -> x * keyRangeChunk,
-                                                                               x -> (x + 1) * keyRangeChunk));
+                .boxed()
+                .collect(
+                        Collectors
+                                .toMap(x -> x * keyRangeChunk,
+                                        x -> (x + 1) * keyRangeChunk));
         final List<Long> segmentList = segments.getSegments()
-                                               .stream()
-                                               .map(Segment::getSegmentId)
-                                               .collect(Collectors.toList());
+                .stream()
+                .map(Segment::getSegmentId)
+                .collect(Collectors.toList());
 
         CompletableFuture<Boolean> scaleStatus = controller.scaleStream(new StreamImpl(scope, stream),
                 segmentList,
@@ -121,7 +122,7 @@ public class PravegaStreamHandler {
 
         System.out.println("Number of Segments after manual scale: " +
                 controller.getCurrentSegments(scope, stream)
-                          .get().getSegments().size());
+                        .get().getSegments().size());
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
@@ -144,11 +145,11 @@ public class PravegaStreamHandler {
     ReaderGroup createReaderGroup() throws URISyntaxException {
         ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
                 ClientConfig.builder()
-                            .controllerURI(new URI(controllerUri)).build());
+                        .controllerURI(new URI(controllerUri)).build());
         readerGroupManager.createReaderGroup(stream,
                 ReaderGroupConfig.builder()
-                                 .stream(Stream.of(scope, stream))
-                                 .build());
+                        .stream(Stream.of(scope, stream))
+                        .build());
         return readerGroupManager.getReaderGroup(stream);
     }
 }
