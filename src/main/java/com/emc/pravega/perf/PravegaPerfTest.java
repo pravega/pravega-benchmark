@@ -27,7 +27,6 @@ import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 
 import java.io.IOException;
-import java.time.Instant;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -118,7 +117,7 @@ public class PravegaPerfTest {
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);
-            final Instant StartTime = Instant.now();
+            final long StartTime = System.currentTimeMillis();
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
@@ -194,7 +193,7 @@ public class PravegaPerfTest {
     }
 
     private static synchronized void shutdown() throws InterruptedException, IOException {
-        final Instant endTime = Instant.now();
+        final long endTime = System.currentTimeMillis();
         if (fjexecutor == null) {
             return;
         }

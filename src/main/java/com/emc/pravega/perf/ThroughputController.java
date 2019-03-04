@@ -18,9 +18,6 @@
 
 package com.emc.pravega.perf;
 
-import java.time.Duration;
-import java.time.Instant;
-
 public class ThroughputController {
     private static final long NS_PER_MS = 1000000L;
     private static final long NS_PER_SEC = 1000 * NS_PER_MS;
@@ -60,7 +57,7 @@ public class ThroughputController {
 
             // If threshold reached, sleep a little
             if (timeNs >= MIN_SLEEP_NS) {
-                Instant sleepStart = Instant.now();
+                long sleepStart = System.nanoTime();
                 try {
                     final long sleepMs = timeNs / NS_PER_MS;
                     final long sleepNs = timeNs - sleepMs * NS_PER_MS;
@@ -69,7 +66,7 @@ public class ThroughputController {
                     // will be taken care in finally block
                 } finally {
                     // in case of short sleeps or oversleep ;adjust it for next sleep duration
-                    final long sleptNS = Duration.between(sleepStart, Instant.now()).toNanos();
+                    final long sleptNS = System.nanoTime()-sleepStart;
                     if (sleptNS > 0) {
                         timeNs -= sleptNS;
                     } else {

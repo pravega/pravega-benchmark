@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,8 +19,6 @@
 package com.emc.pravega.perf;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +32,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private ThroughputController tput;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
-                 boolean isRandomKey, int messageSize, Instant start,
+                 boolean isRandomKey, int messageSize, long start,
                  PerfStats stats, String streamName, ThroughputController tput) {
 
         super(sensorId, events, secondsToRun,
@@ -81,7 +79,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                     key = Integer.toString(workerID);
                 }
 
-                final Instant startTime = Instant.now();
+                final long startTime = System.currentTimeMillis();
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, startTime, payload.length());
@@ -102,7 +100,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             CompletableFuture retFuture = null;
             Random rand = new Random();
 
-            while (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) {
+            while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
                 // Construct event payload
                 String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
@@ -113,7 +111,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                     key = Integer.toString(workerID);
                 }
 
-                final Instant beginTime = Instant.now();
+                final long beginTime = System.currentTimeMillis();
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, beginTime, payload.length());

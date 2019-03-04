@@ -18,8 +18,6 @@
 
 package com.emc.pravega.perf;
 
-import java.time.Instant;
-
 /**
  *  abstract class for Writers and Readers.
  */
@@ -30,12 +28,12 @@ public abstract class Worker {
     final int timeout;
     final String streamName;
     final boolean isRandomKey;
-    final Instant StartTime;
+    final long StartTime;
     final PerfStats stats;
     final int secondsToRun;
 
     Worker(int sensorId, int events, int secondsToRun,
-           boolean isRandomKey, int messageSize, Instant start,
+           boolean isRandomKey, int messageSize, long start,
            PerfStats stats, String streamName, int timeout) {
         this.workerID = sensorId;
         this.events = events;

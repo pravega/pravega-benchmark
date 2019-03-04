@@ -19,8 +19,6 @@
 package com.emc.pravega.perf;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -30,7 +28,7 @@ import java.util.concurrent.ExecutionException;
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
     final private performance perf;
 
-    ReaderWorker(int readerId, int events, int secondsToRun, Instant start,
+    ReaderWorker(int readerId, int events, int secondsToRun, long start,
                  PerfStats stats, String readergrp, int timeout) {
         super(readerId, events, secondsToRun,
                 false, 0, start,
@@ -60,7 +58,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             String ret = null;
             try {
                 for (int i = 0; i < events; i++) {
-                    final Instant startTime = Instant.now();
+                    final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());
@@ -77,8 +75,8 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             String ret = null;
             try {
 
-                for (int i = 0; Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun; i++) {
-                    final Instant startTime = Instant.now();
+                while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
+                    final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());

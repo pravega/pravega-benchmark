@@ -18,7 +18,6 @@
 
 package com.emc.pravega.perf;
 
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 import io.pravega.client.ClientFactory;
@@ -40,7 +39,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
 
     PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
-                                   int messageSize, Instant start,
+                                   int messageSize, long start,
                                    PerfStats stats, String streamName, ThroughputController tput,
                                    ClientFactory factory, int transactionsPerCommit) {
 

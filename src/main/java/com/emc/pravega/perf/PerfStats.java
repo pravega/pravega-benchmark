@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,8 +20,6 @@ package com.emc.pravega.perf;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
-import java.time.Instant;
-import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,10 +34,9 @@ import org.apache.commons.csv.CSVPrinter;
  * class for Performance statistics.
  */
 public class PerfStats {
-    private static final long NANOSEC_PER_SEC = 1000000000L;
     final private int messageSize;
     final private String action;
-    final private Instant start;
+    final private long start;
     private long[] latencies;
     private int sampling;
     private int index;
@@ -59,10 +56,10 @@ public class PerfStats {
      */
     private class TimeStamp {
         final private int bytes;
-        final private Instant start;
-        final private Instant end;
+        final private long start;
+        final private long end;
 
-        TimeStamp(int bytes, Instant start, Instant end) {
+        TimeStamp(int bytes, long start, long end) {
             this.bytes = bytes;
             this.start = start;
             this.end = end;
@@ -73,15 +70,15 @@ public class PerfStats {
      * private class for Performance statistics within a given time window.
      */
     private class TimeWindow {
-        final private Instant startTime;
-        private Instant lastTime;
+        final private long startTime;
+        private long lastTime;
         private long count;
         private long bytes;
         private long maxLatency;
         private long totalLatency;
 
-        public TimeWindow() {
-            this.startTime = Instant.now();
+        public TimeWindow(long start) {
+            this.startTime = start;
             this.lastTime = this.startTime;
             this.count = 0;
             this.bytes = 0;
@@ -105,9 +102,9 @@ public class PerfStats {
         /**
          * print the window statistics
          */
-        public void print(Instant time) {
+        public void print(long time) {
             this.lastTime = time;
-            final double elapsed = Duration.between(this.startTime, this.lastTime).toMillis() / 1000.0;
+            final double elapsed = (this.lastTime - this.startTime) / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
@@ -120,21 +117,21 @@ public class PerfStats {
          *
          * @param time current time.
          */
-        public long windowTimeMS(Instant time) {
-            return Duration.between(this.startTime, time).toMillis();
+        public long windowTimeMS(long time) {
+            return time - window.startTime;
         }
 
         /**
          * get the time duration of this window
          */
         public long windowTimeMS() {
-            return windowTimeMS(Instant.now());
+            return windowTimeMS(System.currentTimeMillis());
         }
     }
 
     public PerfStats(String action, int reportingInterval, int messageSize, long numRecords, String csvFile) throws IOException {
         this.action = action;
-        this.start = Instant.now();
+        this.start = System.currentTimeMillis();
         this.count = 0;
         this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
         this.latencies = new long[(int) (numRecords / this.sampling) + 1];
@@ -143,12 +140,12 @@ public class PerfStats {
         this.totalLatency = 0;
         this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
-        this.window = new TimeWindow();
+        this.window = new TimeWindow(this.start);
         this.queue = new ConcurrentLinkedQueue<TimeStamp>();
         this.executor = new ForkJoinPool(1);
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
+                    .withHeader("event size (bytes)", "Start Time (Milliseconds)", action + " Latency (Milliseconds)"));
         } else {
             this.printer = null;
         }
@@ -176,8 +173,8 @@ public class PerfStats {
     }
 
 
-    private void record(int bytes, Instant startTime, Instant endTime) {
-        final long latency = Duration.between(startTime, endTime).toMillis();
+    private void record(int bytes, long startTime, long endTime) {
+        final long latency = endTime-startTime;
         this.count++;
         this.bytes += bytes;
         this.totalLatency += latency;
@@ -191,9 +188,8 @@ public class PerfStats {
 
 
         if (this.printer != null) {
-            final long nanotime = startTime.getEpochSecond() * NANOSEC_PER_SEC + startTime.getNano();
             try {
-                printer.printRecord(bytes, nanotime, latency);
+                printer.printRecord(bytes, startTime, latency);
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
@@ -215,10 +211,10 @@ public class PerfStats {
      * print the performance statistics of current time window.
      */
     private void print() throws IOException {
-        final Instant time = Instant.now();
+        final long time = System.currentTimeMillis();
         if (window.windowTimeMS(time) >= windowInterval) {
             window.print(time);
-            this.window = new TimeWindow();
+            this.window = new TimeWindow(time);
             if (printer != null) {
                 printer.flush();
             }
@@ -228,9 +224,9 @@ public class PerfStats {
     /**
      * print the final performance statistics.
      */
-    public void printTotal(Instant endTime) {
+    public void printTotal(long endTime) {
 
-        final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
+        final double elapsed = (endTime-start) / 1000.0;
         final double recsPerSec = count / elapsed;
         final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
@@ -255,7 +251,7 @@ public class PerfStats {
      * @param startTime starting time
      * @param endTime   End time
      **/
-    private void recordTimeStamp(int bytes, Instant startTime, Instant endTime) {
+    private void recordTimeStamp(int bytes, long startTime, long endTime) {
         queue.add(new TimeStamp(bytes, startTime, endTime));
     }
 
@@ -268,13 +264,14 @@ public class PerfStats {
      * @param length    length of data read/written
      * @return a completable future for recording the end time.
      */
-    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) {
-        final Instant time = Instant.now();
+    public CompletableFuture recordTime(CompletableFuture retVal, long startTime, int length) {
+
         if (retVal == null) {
-            recordTimeStamp(length, startTime, time);
+            final long endTime = System.currentTimeMillis();
+            recordTimeStamp(length, startTime, endTime);
         } else {
             retVal = retVal.thenAccept(d -> {
-                final Instant endTime = Instant.now();
+                final long endTime = System.currentTimeMillis();
                 recordTimeStamp(length, startTime, endTime);
             });
         }
@@ -287,7 +284,7 @@ public class PerfStats {
      * @return rate of number of events till now.
      */
     public synchronized int eventsRate() {
-        final double elapsed = Duration.between(start, Instant.now()).toMillis() / 1000.0;
+        final double elapsed = (System.currentTimeMillis()-start) / 1000.0;
         return (int) (count / elapsed);
     }
 }

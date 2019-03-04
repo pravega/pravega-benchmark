@@ -18,8 +18,6 @@
 
 package com.emc.pravega.perf;
 
-import java.time.Instant;
-
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
@@ -35,7 +33,7 @@ public class PravegaReaderWorker extends ReaderWorker {
     private final String readerId;
 
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
-                        Instant start, PerfStats stats, String readergrp,
+                        long start, PerfStats stats, String readergrp,
                         int timeout, ClientFactory factory) {
         super(readerId, events, secondsToRun, start, stats, readergrp, timeout);
 
