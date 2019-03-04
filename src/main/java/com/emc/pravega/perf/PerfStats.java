@@ -47,7 +47,6 @@ public class PerfStats {
     private long totalLatency;
     final private long windowInterval;
     private timeWindow window;
-    final private AtomicLong eventID;
     final private CSVPrinter printer;
 
 
@@ -126,18 +125,16 @@ public class PerfStats {
         this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
         this.window = new timeWindow();
-        this.eventID = new AtomicLong();
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("#", "Event ID", "event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
+                    .withHeader("#", "event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
         } else {
             this.printer = null;
         }
 
     }
 
-    private synchronized void record(long event, int bytes, Instant startTime, Instant endTime) throws IOException {
-
+    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
         final long latency = Duration.between(startTime, endTime).toMillis();
         this.count++;
         this.bytes += bytes;
@@ -150,10 +147,16 @@ public class PerfStats {
             this.index++;
         }
 
+
         if (this.printer != null) {
             final long nanotime = startTime.getEpochSecond() * NANOSEC_PER_SEC + startTime.getNano();
-            printer.printRecord(count, event, bytes, nanotime, latency);
+            try {
+                printer.printRecord(count, bytes, nanotime, latency);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
+
     }
 
     private static long[] percentiles(long[] latencies, int count, double... percentiles) {
@@ -211,17 +214,12 @@ public class PerfStats {
      */
     public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) throws IOException {
         final Instant time = Instant.now();
-        final long event = eventID.incrementAndGet();
         if (retVal == null) {
-            record(event, length, startTime, time);
+            record(length, startTime, time);
         } else {
             retVal = retVal.thenAccept(d -> {
                 final Instant endTime = Instant.now();
-                try {
-                    record(event, length, startTime, endTime);
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
+                record(length, startTime, endTime);
             });
         }
         return retVal;
