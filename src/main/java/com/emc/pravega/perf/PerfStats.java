@@ -22,6 +22,8 @@ import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.time.Instant;
 import java.time.Duration;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicLong;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -46,14 +48,31 @@ public class PerfStats {
     private long maxLatency;
     private long totalLatency;
     final private long windowInterval;
-    private timeWindow window;
+    private TimeWindow window;
     final private CSVPrinter printer;
+    final private ConcurrentLinkedQueue<TimeStamp> queue;
+    final private ForkJoinPool executor;
 
+
+    /**
+     * private class for start and end time.
+     */
+    private class TimeStamp {
+        final private int bytes;
+        final private Instant start;
+        final private Instant end;
+
+        TimeStamp(int bytes, Instant start, Instant end) {
+            this.bytes = bytes;
+            this.start = start;
+            this.end = end;
+        }
+    }
 
     /**
      * private class for Performance statistics within a given time window.
      */
-    private class timeWindow {
+    private class TimeWindow {
         final private Instant startTime;
         private Instant lastTime;
         private long count;
@@ -61,7 +80,7 @@ public class PerfStats {
         private long maxLatency;
         private long totalLatency;
 
-        public timeWindow() {
+        public TimeWindow() {
             this.startTime = Instant.now();
             this.lastTime = this.startTime;
             this.count = 0;
@@ -124,17 +143,40 @@ public class PerfStats {
         this.totalLatency = 0;
         this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
-        this.window = new timeWindow();
+        this.window = new TimeWindow();
+        this.queue = new ConcurrentLinkedQueue<TimeStamp>();
+        this.executor = new ForkJoinPool(1);
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("#", "event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
+                    .withHeader("event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
         } else {
             this.printer = null;
         }
-
+        executor.execute(new ProcessQueue());
     }
 
-    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
+    /**
+     * private class for start and end time.
+     */
+    private class ProcessQueue implements Runnable {
+        public void run() {
+            TimeStamp t;
+            while (true) {
+                try {
+                    t = queue.poll();
+                    if (t != null) {
+                        record(t.bytes, t.start, t.end);
+                    }
+                    print();
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }
+    }
+
+
+    private void record(int bytes, Instant startTime, Instant endTime) {
         final long latency = Duration.between(startTime, endTime).toMillis();
         this.count++;
         this.bytes += bytes;
@@ -151,12 +193,11 @@ public class PerfStats {
         if (this.printer != null) {
             final long nanotime = startTime.getEpochSecond() * NANOSEC_PER_SEC + startTime.getNano();
             try {
-                printer.printRecord(count, bytes, nanotime, latency);
+                printer.printRecord(bytes, nanotime, latency);
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
         }
-
     }
 
     private static long[] percentiles(long[] latencies, int count, double... percentiles) {
@@ -173,12 +214,11 @@ public class PerfStats {
     /**
      * print the performance statistics of current time window.
      */
-    public synchronized void print() throws IOException {
-
+    private void print() throws IOException {
         final Instant time = Instant.now();
         if (window.windowTimeMS(time) >= windowInterval) {
             window.print(time);
-            this.window = new timeWindow();
+            this.window = new TimeWindow();
             if (printer != null) {
                 printer.flush();
             }
@@ -188,7 +228,7 @@ public class PerfStats {
     /**
      * print the final performance statistics.
      */
-    public synchronized void printTotal(Instant endTime) throws IOException {
+    public void printTotal(Instant endTime) {
 
         final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
         final double recsPerSec = count / elapsed;
@@ -200,9 +240,25 @@ public class PerfStats {
                 count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
                 percs[0], percs[1], percs[2], percs[3]);
         if (printer != null) {
-            printer.close();
+            try {
+                printer.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
     }
+
+    /**
+     * record the data write/read time of data.
+     *
+     * @param bytes     number of bytes written or read
+     * @param startTime starting time
+     * @param endTime   End time
+     **/
+    private void recordTimeStamp(int bytes, Instant startTime, Instant endTime) {
+        queue.add(new TimeStamp(bytes, startTime, endTime));
+    }
+
 
     /**
      * record the data write/read time of given length of data.
@@ -212,14 +268,14 @@ public class PerfStats {
      * @param length    length of data read/written
      * @return a completable future for recording the end time.
      */
-    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) throws IOException {
+    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) {
         final Instant time = Instant.now();
         if (retVal == null) {
-            record(length, startTime, time);
+            recordTimeStamp(length, startTime, time);
         } else {
             retVal = retVal.thenAccept(d -> {
                 final Instant endTime = Instant.now();
-                record(length, startTime, endTime);
+                recordTimeStamp(length, startTime, endTime);
             });
         }
         return retVal;

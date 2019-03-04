@@ -65,7 +65,6 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());
                     }
-                    stats.print();
                 }
             } finally {
                 close();
@@ -84,7 +83,6 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     if (ret != null) {
                         stats.recordTime(null, startTime, ret.length());
                     }
-                    stats.print();
                 }
             } finally {
                 close();
