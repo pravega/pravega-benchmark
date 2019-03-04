@@ -276,14 +276,4 @@ public class PerfStats {
         }
         return retVal;
     }
-
-    /**
-     * get the rate of events.
-     *
-     * @return rate of number of events till now.
-     */
-    public synchronized int eventsRate() {
-        final double elapsed = (System.currentTimeMillis() - start) / 1000.0;
-        return (int) (count / elapsed);
-    }
 }

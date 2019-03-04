@@ -29,16 +29,16 @@ import java.util.concurrent.ExecutionException;
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private performance perf;
-    final private ThroughputController tput;
+    final private EventsController eCnt;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, ThroughputController tput) {
+                 PerfStats stats, String streamName, int eventsPerSec) {
 
         super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
                 stats, streamName, 0);
-        this.tput = tput;
+        this.eCnt = new EventsController(start, eventsPerSec);
         perf = secondsToRun > 0 ? new throughputWriter() : new eventsWriter();
     }
 
@@ -83,7 +83,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, startTime, payload.length());
-                tput.control(stats.eventsRate());
+                eCnt.control(i);
 
             }
 
@@ -100,7 +100,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             CompletableFuture retFuture = null;
             Random rand = new Random();
 
-            while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
+            for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
                 // Construct event payload
                 String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
@@ -115,7 +115,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 retFuture = writeData(key, payload);
                 // event ingestion
                 retFuture = stats.recordTime(retFuture, beginTime, payload.length());
-                tput.control(stats.eventsRate());
+                eCnt.control(i);
             }
 
             flush();

@@ -61,6 +61,7 @@ public class PravegaPerfTest {
     private static int consumerCount = 0;
     private static int segmentCount = 0;
     private static int events = 3000;
+    private static int eventsPerSec = 0;
     private static boolean isRandomKey = false;
     private static int transactionPerCommit = 0;
     private static int runtimeSec = 0;
@@ -69,7 +70,6 @@ public class PravegaPerfTest {
     private static ForkJoinPool fjexecutor;
     private static PerfStats produceStats, consumeStats;
     private static double throughput = 0;
-    private static ThroughputController tput;
     private static String writeFile = null;
     private static String readFile = null;
 
@@ -117,7 +117,7 @@ public class PravegaPerfTest {
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);
-            final long StartTime = System.currentTimeMillis();
+            final long startTime = System.currentTimeMillis();
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
@@ -125,7 +125,7 @@ public class PravegaPerfTest {
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, events,
-                                runtimeSec, StartTime, consumeStats,
+                                runtimeSec, startTime, consumeStats,
                                 streamName, timeout, factory))
                         .collect(Collectors.toList());
             } else {
@@ -137,9 +137,9 @@ public class PravegaPerfTest {
 
                 produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1), writeFile);
                 if (throughput == 0 && runtimeSec > 0) {
-                    tput = new ThroughputController(events);
-                } else {
-                    tput = new ThroughputController(messageSize, throughput);
+                    eventsPerSec = events / producerCount;
+                } else if (throughput > 0) {
+                    eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
                 }
 
                 if (transactionPerCommit > 0) {
@@ -147,9 +147,9 @@ public class PravegaPerfTest {
                             .boxed()
                             .map(i -> new PravegaTransactionWriterWorker(i, events,
                                     runtimeSec, isRandomKey,
-                                    messageSize, StartTime,
+                                    messageSize, startTime,
                                     produceStats, streamName,
-                                    tput, factory,
+                                    eventsPerSec, factory,
                                     transactionPerCommit))
                             .collect(Collectors.toList());
                 } else {
@@ -157,9 +157,9 @@ public class PravegaPerfTest {
                             .boxed()
                             .map(i -> new PravegaWriterWorker(i, events,
                                     runtimeSec, isRandomKey,
-                                    messageSize, StartTime,
+                                    messageSize, startTime,
                                     produceStats, streamName,
-                                    tput, factory))
+                                    eventsPerSec, factory))
                             .collect(Collectors.toList());
                 }
             } else {
