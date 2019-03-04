@@ -20,14 +20,13 @@ package com.emc.pravega.perf;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.EventWriterConfig;
 import io.pravega.client.stream.TxnFailedException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * class for Pravega writer/producer.
@@ -35,13 +34,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<String> producer;
 
-    PravegaWriterWorker(int sensorId, int eventsPerWorker, int secondsToRun,
+    PravegaWriterWorker(int sensorId, int events, int secondsToRun,
                         boolean isRandomKey, int messageSize, Instant start,
-                        PerfStats stats, String streamName, ClientFactory factory) {
+                        PerfStats stats, String streamName, ThroughputController tput, ClientFactory factory) {
 
-        super(sensorId, eventsPerWorker, secondsToRun,
+        super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
-                stats, streamName);
+                stats, streamName, tput);
 
         this.producer = factory.createEventWriter(streamName,
                 new UTF8StringSerializer(),

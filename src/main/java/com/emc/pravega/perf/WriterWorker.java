@@ -18,26 +18,30 @@
 
 package com.emc.pravega.perf;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
+    final private performance perf;
+    final private ThroughputController tput;
 
-    WriterWorker(int sensorId, int eventsPerWorker, int secondsToRun,
+    WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, Instant start,
-                 PerfStats stats, String streamName) {
+                 PerfStats stats, String streamName, ThroughputController tput) {
 
-        super(sensorId, eventsPerWorker, secondsToRun,
+        super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
                 stats, streamName, 0);
+        this.tput = tput;
+        perf = secondsToRun > 0 ? new throughputWriter() : new eventsWriter();
     }
 
     /**
@@ -54,34 +58,74 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract void flush();
 
     @Override
-    public Void call() throws InterruptedException, ExecutionException {
-        CompletableFuture retFuture = null;
-        Random rand = new Random();
+    public Void call() throws InterruptedException, ExecutionException, IOException {
+        perf.benchmark();
+        return null;
+    }
 
-        for (int i = 0; (i < eventsPerWorker) &&
-                (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun); i++) {
+    private class eventsWriter implements performance {
 
-            // Construct event payload
-            String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-            String payload = String.format("%-" + messageSize + "s", val);
-            String key;
-            if (isRandomKey) {
-                key = Integer.toString(workerID + rand.nextInt());
-            } else {
-                key = Integer.toString(workerID);
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
+            CompletableFuture retFuture = null;
+            Random rand = new Random();
+
+            for (int i = 0; i < events; i++) {
+
+                // Construct event payload
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+                String payload = String.format("%-" + messageSize + "s", val);
+                String key;
+                if (isRandomKey) {
+                    key = Integer.toString(workerID + rand.nextInt());
+                } else {
+                    key = Integer.toString(workerID);
+                }
+
+                final Instant startTime = Instant.now();
+                retFuture = writeData(key, payload);
+                // event ingestion
+                retFuture = stats.recordTime(retFuture, startTime, payload.length());
+                stats.print();
+                tput.control(stats.eventsRate());
+
             }
 
-            final Instant startTime = Instant.now();
-            retFuture = writeData(key, payload);
-            // event ingestion
-            retFuture = stats.recordTime(retFuture, startTime, payload.length());
+            flush();
+
+            //Wait for the last packet to get acked
+            retFuture.get();
         }
+    }
 
-        flush();
+    private class throughputWriter implements performance {
 
-        //Wait for the last packet to get acked
-        retFuture.get();
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
+            CompletableFuture retFuture = null;
+            Random rand = new Random();
 
-        return null;
+            while (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) {
+                // Construct event payload
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+                String payload = String.format("%-" + messageSize + "s", val);
+                String key;
+                if (isRandomKey) {
+                    key = Integer.toString(workerID + rand.nextInt());
+                } else {
+                    key = Integer.toString(workerID);
+                }
+
+                final Instant beginTime = Instant.now();
+                retFuture = writeData(key, payload);
+                // event ingestion
+                retFuture = stats.recordTime(retFuture, beginTime, payload.length());
+                stats.print();
+                tput.control(stats.eventsRate());
+            }
+
+            flush();
+
+            //Wait for the last packet to get acked
+            retFuture.get();
+        }
     }
 }

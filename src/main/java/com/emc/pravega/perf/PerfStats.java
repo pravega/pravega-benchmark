@@ -17,22 +17,26 @@
  */
 package com.emc.pravega.perf;
 
+import java.io.IOException;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.time.Instant;
 import java.time.Duration;
-import io.pravega.client.stream.TxnFailedException;
-import io.pravega.client.stream.ReinitializationRequiredException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+
 
 /**
- *  class for Performance statistics.
+ * class for Performance statistics.
  */
 public class PerfStats {
+    private static final long NANOSEC_PER_SEC = 1000000000L;
     final private int messageSize;
     final private String action;
-    private Instant windowStartTime;
     final private Instant start;
     private long[] latencies;
     private int sampling;
@@ -41,86 +45,115 @@ public class PerfStats {
     private long bytes;
     private long maxLatency;
     private long totalLatency;
-    private long windowMaxLatency;
-    private long windowTotalLatency;
-    private long windowCount;
-    private long windowBytes;
-    final private long reportingInterval;
+    final private long windowInterval;
+    private timeWindow window;
+    final private AtomicLong eventID;
+    final private CSVPrinter printer;
 
-    public PerfStats(String action, int reportingInterval, int messageSize, long numRecords) {
+
+    /**
+     * private class for Performance statistics within a given time window.
+     */
+    private class timeWindow {
+        final private Instant startTime;
+        private Instant lastTime;
+        private long count;
+        private long bytes;
+        private long maxLatency;
+        private long totalLatency;
+
+        public timeWindow() {
+            this.startTime = Instant.now();
+            this.lastTime = this.startTime;
+            this.count = 0;
+            this.bytes = 0;
+            this.maxLatency = 0;
+            this.totalLatency = 0;
+        }
+
+        /**
+         * record the latency and bytes
+         *
+         * @param latency latency in ms.
+         * @param bytes   number of bytes.
+         */
+        public void record(long latency, long bytes) {
+            this.count++;
+            this.totalLatency += latency;
+            this.bytes += bytes;
+            this.maxLatency = Math.max(this.maxLatency, latency);
+        }
+
+        /**
+         * print the window statistics
+         */
+        public void print(Instant time) {
+            this.lastTime = time;
+            final double elapsed = Duration.between(this.startTime, this.lastTime).toMillis() / 1000.0;
+            final double recsPerSec = count / elapsed;
+            final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+
+            System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
+                    count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency);
+        }
+
+        /**
+         * get the current time duration of this window
+         *
+         * @param time current time.
+         */
+        public long windowTimeMS(Instant time) {
+            return Duration.between(this.startTime, time).toMillis();
+        }
+
+        /**
+         * get the time duration of this window
+         */
+        public long windowTimeMS() {
+            return windowTimeMS(Instant.now());
+        }
+    }
+
+    public PerfStats(String action, int reportingInterval, int messageSize, long numRecords, String csvFile) throws IOException {
         this.action = action;
         this.start = Instant.now();
-        this.windowStartTime = Instant.now();
         this.count = 0;
         this.sampling = (int) (numRecords / Math.min(numRecords, 500000));
         this.latencies = new long[(int) (numRecords / this.sampling) + 1];
         this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
-        this.windowCount = 0;
-        this.windowBytes = 0;
-        this.reportingInterval = reportingInterval;
+        this.windowInterval = reportingInterval;
         this.messageSize = messageSize;
+        this.window = new timeWindow();
+        this.eventID = new AtomicLong();
+        if (csvFile != null) {
+            this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
+                    .withHeader("#", "Event ID", "event size (bytes)", "Start Time (Nanoseconds)", action + " Latency (Milliseconds)"));
+        } else {
+            this.printer = null;
+        }
+
     }
 
-    private synchronized void record(int bytes, Instant startTime, Instant endTime) {
+    private synchronized void record(long event, int bytes, Instant startTime, Instant endTime) throws IOException {
+
         final long latency = Duration.between(startTime, endTime).toMillis();
         this.count++;
-        this.windowCount++;
         this.bytes += bytes;
-        this.windowBytes += bytes;
         this.totalLatency += latency;
-        this.windowTotalLatency += latency;
         this.maxLatency = Math.max(this.maxLatency, latency);
-        this.windowMaxLatency = Math.max(windowMaxLatency, latency);
+        window.record(latency, bytes);
 
         if (this.count % this.sampling == 0) {
             this.latencies[index] = latency;
             this.index++;
         }
 
-        /* did we arrived at reporting time */
-        if (Duration.between(windowStartTime, endTime).toMillis() >= reportingInterval) {
-            printWindow(endTime);
-            newWindow();
+        if (this.printer != null) {
+            final long nanotime = startTime.getEpochSecond() * NANOSEC_PER_SEC + startTime.getNano();
+            printer.printRecord(count, event, bytes, nanotime, latency);
         }
-    }
-
-    private void printWindow(Instant endTime) {
-        final double elapsed = Duration.between(windowStartTime, endTime).toMillis()/1000.0;
-        final double recsPerSec = windowCount / elapsed;
-        final double mbPerSec = (this.windowBytes / (1024.0 * 1024.0))/ elapsed;
-
-        System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
-                windowCount, action, recsPerSec, mbPerSec,
-                windowTotalLatency / (double) windowCount,
-                (double) windowMaxLatency);
-    }
-
-    private void newWindow() {
-        this.windowStartTime = Instant.now();
-        this.windowCount = 0;
-        this.windowBytes = 0;
-        this.windowMaxLatency = 0;
-        this.windowTotalLatency = 0;
-    }
-
-
-    /**
-     * print the final performance statistics.
-     *
-     * @param endTime        endtime to performance benchmarking.
-     */
-    public synchronized void printTotal(Instant endTime) {
-        final double elapsed = Duration.between(start, endTime).toMillis()/1000.0;
-        final double recsPerSec =  count / elapsed;
-        final double mbPerSec = (this.bytes / (1024.0 * 1024.0))/elapsed ;
-
-        long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
-        System.out.printf(
-                "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
-                count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
-                percs[0], percs[1], percs[2], percs[3]);
     }
 
     private static long[] percentiles(long[] latencies, int count, double... percentiles) {
@@ -135,23 +168,72 @@ public class PerfStats {
     }
 
     /**
+     * print the performance statistics of current time window.
+     */
+    public synchronized void print() throws IOException {
+
+        final Instant time = Instant.now();
+        if (window.windowTimeMS(time) >= windowInterval) {
+            window.print(time);
+            this.window = new timeWindow();
+            if (printer != null) {
+                printer.flush();
+            }
+        }
+    }
+
+    /**
+     * print the final performance statistics.
+     */
+    public synchronized void printTotal(Instant endTime) throws IOException {
+
+        final double elapsed = Duration.between(start, endTime).toMillis() / 1000.0;
+        final double recsPerSec = count / elapsed;
+        final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+
+        long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
+        System.out.printf(
+                "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
+                percs[0], percs[1], percs[2], percs[3]);
+        if (printer != null) {
+            printer.close();
+        }
+    }
+
+    /**
      * record the data write/read time of given length of data.
      *
-     * @param retVal         future to wait for.
-     * @param startTime      starting time
-     * @param length         length of data read/written
+     * @param retVal    future to wait for.
+     * @param startTime starting time
+     * @param length    length of data read/written
      * @return a completable future for recording the end time.
      */
-    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) {
+    public CompletableFuture recordTime(CompletableFuture retVal, Instant startTime, int length) throws IOException {
+        final Instant time = Instant.now();
+        final long event = eventID.incrementAndGet();
         if (retVal == null) {
-            final Instant endTime = Instant.now();
-            record(length, startTime, endTime);
+            record(event, length, startTime, time);
         } else {
-            retVal = retVal.thenAccept((d) -> {
+            retVal = retVal.thenAccept(d -> {
                 final Instant endTime = Instant.now();
-                record(length, startTime, endTime);
+                try {
+                    record(event, length, startTime, endTime);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
             });
         }
         return retVal;
+    }
+
+    /**
+     * get the rate of events.
+     *
+     * @return rate of number of events till now.
+     */
+    public synchronized int eventsRate() {
+        final double elapsed = Duration.between(start, Instant.now()).toMillis() / 1000.0;
+        return (int) (count / elapsed);
     }
 }

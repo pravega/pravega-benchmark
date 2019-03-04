@@ -8,7 +8,7 @@
  * with the License. You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,9 +20,11 @@ package com.emc.pravega.perf;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
+
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.concurrent.GuardedBy;
@@ -36,14 +38,14 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @GuardedBy("this")
     private Transaction<String> transaction;
 
-    PravegaTransactionWriterWorker(int sensorId, int eventsPerWorker,
+    PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, Instant start,
-                                   PerfStats stats, String streamName,
+                                   PerfStats stats, String streamName, ThroughputController tput,
                                    ClientFactory factory, int transactionsPerCommit) {
 
-        super(sensorId, eventsPerWorker, secondsToRun, isRandomKey,
-                messageSize, start, stats, streamName, factory);
+        super(sensorId, events, secondsToRun, isRandomKey,
+                messageSize, start, stats, streamName, tput, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
         eventCount = 0;
@@ -53,7 +55,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @Override
     public CompletableFuture writeData(String key, String data) {
         try {
-             synchronized (this) {
+            synchronized (this) {
                 transaction.writeEvent(key, data);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
