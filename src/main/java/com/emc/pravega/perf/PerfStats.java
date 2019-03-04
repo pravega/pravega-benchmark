@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at
- * <p>
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -174,7 +174,7 @@ public class PerfStats {
 
 
     private void record(int bytes, long startTime, long endTime) {
-        final long latency = endTime-startTime;
+        final long latency = endTime - startTime;
         this.count++;
         this.bytes += bytes;
         this.totalLatency += latency;
@@ -225,8 +225,7 @@ public class PerfStats {
      * print the final performance statistics.
      */
     public void printTotal(long endTime) {
-
-        final double elapsed = (endTime-start) / 1000.0;
+        final double elapsed = (endTime - start) / 1000.0;
         final double recsPerSec = count / elapsed;
         final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
@@ -284,7 +283,7 @@ public class PerfStats {
      * @return rate of number of events till now.
      */
     public synchronized int eventsRate() {
-        final double elapsed = (System.currentTimeMillis()-start) / 1000.0;
+        final double elapsed = (System.currentTimeMillis() - start) / 1000.0;
         return (int) (count / elapsed);
     }
 }
