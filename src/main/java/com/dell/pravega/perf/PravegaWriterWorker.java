@@ -45,12 +45,10 @@ public class PravegaWriterWorker extends WriterWorker {
         final long startTime = System.currentTimeMillis();
         ret = producer.writeEvent(data);
         if (ret == null) {
-            final long endTime = System.currentTimeMillis();
-            record.accept(startTime, endTime, messageSize);
+            record.accept(startTime, System.currentTimeMillis(), messageSize);
         } else {
             ret.thenAccept(d -> {
-                final long endTime = System.currentTimeMillis();
-                record.accept(startTime, endTime, messageSize);
+                record.accept(startTime, System.currentTimeMillis(), messageSize);
             });
         }
     }
