@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package com.dell.pravega.perf;
@@ -112,7 +112,7 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, consumerCount * events * (runtimeSec + 1), readFile);
+                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, readFile);
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, events,
@@ -126,7 +126,7 @@ public class PravegaPerfTest {
 
             if (producerCount > 0) {
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, producerCount * events * (runtimeSec + 1), writeFile);
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
                 if (throughput == 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
                 } else if (throughput > 0) {
