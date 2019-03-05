@@ -216,6 +216,8 @@ public class PerfStats {
      * print the final performance statistics.
      */
     public void printTotal(long endTime) {
+        executor.shutdownNow();
+
         final double elapsed = (endTime - start) / 1000.0;
         final double recsPerSec = count / elapsed;
         final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
