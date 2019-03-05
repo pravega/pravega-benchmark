@@ -26,7 +26,7 @@
     <allow pkg="com.typesafe.config"/>
     <allow pkg="org.rocksdb"/>
     <allow pkg="com.codahale"/>
-    <allow pkg="com.emc.object"/>
+    <allow pkg="com.dell.object"/>
     <allow pkg="com.readytalk"/>
     <allow pkg="com.sun.security"/>
     <allow pkg="org.glassfish.jersey"/>
