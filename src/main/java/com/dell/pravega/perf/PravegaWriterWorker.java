@@ -40,10 +40,10 @@ public class PravegaWriterWorker extends WriterWorker {
 
 
     @Override
-    public void recordWrite(String key, String data, TriConsumer record) {
+    public void recordWrite(String data, TriConsumer record) {
         CompletableFuture ret;
         final long startTime = System.currentTimeMillis();
-        ret = producer.writeEvent(key, data);
+        ret = producer.writeEvent(data);
         if (ret == null) {
             final long endTime = System.currentTimeMillis();
             record.accept(startTime, endTime, messageSize);

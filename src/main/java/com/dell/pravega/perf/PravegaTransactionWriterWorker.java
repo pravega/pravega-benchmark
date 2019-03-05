@@ -42,11 +42,11 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     }
 
     @Override
-    public void recordWrite(String key, String data, TriConsumer record) {
+    public void recordWrite(String data, TriConsumer record) {
         try {
             synchronized (this) {
                 final long startTime = System.currentTimeMillis();
-                transaction.writeEvent(key, data);
+                transaction.writeEvent(data);
                 record.accept(startTime, System.currentTimeMillis(), messageSize);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {

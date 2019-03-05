@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package com.dell.pravega.perf;
@@ -36,11 +36,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     /**
      * writes the data and benchmark
      *
-     * @param key    key for data.
      * @param data   data to write
      * @param record to call for benchmarking
      */
-    public abstract void recordWrite(String key, String data, TriConsumer record);
+    public abstract void recordWrite(String data, TriConsumer record);
 
     /**
      * flush the producer data.
@@ -63,14 +62,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 // Construct event payload
                 String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
-                String key;
-                if (isRandomKey) {
-                    key = Integer.toString(workerID + rand.nextInt());
-                } else {
-                    key = Integer.toString(workerID);
-                }
-
-                recordWrite(key, payload, stats::recordTime);
+                recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
 
             }
@@ -89,14 +81,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 // Construct event payload
                 String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
-                String key;
-                if (isRandomKey) {
-                    key = Integer.toString(workerID + rand.nextInt());
-                } else {
-                    key = Integer.toString(workerID);
-                }
-
-                recordWrite(key, payload, stats::recordTime);
+                recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
             }
 
