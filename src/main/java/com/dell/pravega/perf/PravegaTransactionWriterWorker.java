@@ -5,12 +5,10 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package com.dell.pravega.perf;
-
-import java.util.concurrent.CompletableFuture;
 
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
@@ -44,10 +42,12 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     }
 
     @Override
-    public CompletableFuture writeData(String key, String data) {
+    public void recordWrite(String key, String data, TriConsumer record) {
         try {
             synchronized (this) {
+                final long startTime = System.currentTimeMillis();
                 transaction.writeEvent(key, data);
+                record.accept(startTime, System.currentTimeMillis(), messageSize);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
                     eventCount = 0;
@@ -58,6 +58,5 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
         } catch (TxnFailedException e) {
             throw new RuntimeException("Transaction Write data failed ", e);
         }
-        return null;
     }
 }

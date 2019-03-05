@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package com.dell.pravega.perf;
@@ -38,9 +38,21 @@ public class PravegaWriterWorker extends WriterWorker {
                 EventWriterConfig.builder().build());
     }
 
+
     @Override
-    public CompletableFuture writeData(String key, String data) {
-        return producer.writeEvent(key, data);
+    public void recordWrite(String key, String data, TriConsumer record) {
+        CompletableFuture ret;
+        final long startTime = System.currentTimeMillis();
+        ret = producer.writeEvent(key, data);
+        if (ret == null) {
+            final long endTime = System.currentTimeMillis();
+            record.accept(startTime, endTime, messageSize);
+        } else {
+            ret.thenAccept(d -> {
+                final long endTime = System.currentTimeMillis();
+                record.accept(startTime, endTime, messageSize);
+            });
+        }
     }
 
     @Override

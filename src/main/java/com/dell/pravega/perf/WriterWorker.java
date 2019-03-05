@@ -13,7 +13,6 @@ package com.dell.pravega.perf;
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -35,12 +34,13 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
     /**
-     * writes the data.
+     * writes the data and benchmark
      *
-     * @param key  key for data.
-     * @param data data to write
+     * @param key    key for data.
+     * @param data   data to write
+     * @param record to call for benchmarking
      */
-    public abstract CompletableFuture writeData(String key, String data);
+    public abstract void recordWrite(String key, String data, TriConsumer record);
 
     /**
      * flush the producer data.
@@ -56,7 +56,6 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private class eventsWriter implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            CompletableFuture retFuture = null;
             Random rand = new Random();
 
             for (int i = 0; i < events; i++) {
@@ -71,25 +70,19 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                     key = Integer.toString(workerID);
                 }
 
-                final long startTime = System.currentTimeMillis();
-                retFuture = writeData(key, payload);
-                // event ingestion
-                retFuture = stats.recordTime(retFuture, startTime, payload.length());
+                recordWrite(key, payload, stats::recordTime);
                 eCnt.control(i);
 
             }
 
             flush();
 
-            //Wait for the last packet to get acked
-            retFuture.get();
         }
     }
 
     private class throughputWriter implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            CompletableFuture retFuture = null;
             Random rand = new Random();
 
             for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
@@ -103,17 +96,11 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                     key = Integer.toString(workerID);
                 }
 
-                final long beginTime = System.currentTimeMillis();
-                retFuture = writeData(key, payload);
-                // event ingestion
-                retFuture = stats.recordTime(retFuture, beginTime, payload.length());
+                recordWrite(key, payload, stats::recordTime);
                 eCnt.control(i);
             }
 
             flush();
-
-            //Wait for the last packet to get acked
-            retFuture.get();
         }
     }
 }

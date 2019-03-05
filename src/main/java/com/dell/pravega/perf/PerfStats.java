@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 package com.dell.pravega.perf;
 
@@ -237,34 +237,14 @@ public class PerfStats {
     /**
      * record the data write/read time of data.
      *
-     * @param bytes     number of bytes written or read
      * @param startTime starting time
      * @param endTime   End time
+     * @param bytes     number of bytes written or read
      **/
-    private void recordTimeStamp(int bytes, long startTime, long endTime) {
+    public void recordTime(long startTime, long endTime, int bytes) {
         queue.add(new TimeStamp(bytes, startTime, endTime));
     }
-
-
-    /**
-     * record the data write/read time of given length of data.
-     *
-     * @param retVal    future to wait for.
-     * @param startTime starting time
-     * @param length    length of data read/written
-     * @return a completable future for recording the end time.
-     */
-    public CompletableFuture recordTime(CompletableFuture retVal, long startTime, int length) {
-
-        if (retVal == null) {
-            final long endTime = System.currentTimeMillis();
-            recordTimeStamp(length, startTime, endTime);
-        } else {
-            retVal = retVal.thenAccept(d -> {
-                final long endTime = System.currentTimeMillis();
-                recordTimeStamp(length, startTime, endTime);
-            });
-        }
-        return retVal;
-    }
 }
+
+
+

@@ -53,7 +53,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(null, startTime, ret.length());
+                        stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
                     }
                 }
             } finally {
@@ -71,7 +71,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(null, startTime, ret.length());
+                        stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
                     }
                 }
             } finally {
