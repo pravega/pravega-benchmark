@@ -54,7 +54,6 @@ public class PravegaPerfTest {
     private static int segmentCount = 0;
     private static int events = 3000;
     private static int eventsPerSec = 0;
-    private static boolean isRandomKey = false;
     private static int transactionPerCommit = 0;
     private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
@@ -138,7 +137,7 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaTransactionWriterWorker(i, events,
-                                    runtimeSec, isRandomKey,
+                                    runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
                                     eventsPerSec, factory,
@@ -148,7 +147,7 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaWriterWorker(i, events,
-                                    runtimeSec, isRandomKey,
+                                    runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
                                     eventsPerSec, factory))
@@ -218,8 +217,6 @@ public class PravegaPerfTest {
         options.addOption("transaction", true, "Producers use transactions or not");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("stream", true, "Stream name");
-        options.addOption("randomkey", true,
-                "Set Random key default is one key per producer");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
@@ -270,10 +267,6 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("stream")) {
                 streamName = commandline.getOptionValue("stream");
-            }
-
-            if (commandline.hasOption("randomkey")) {
-                isRandomKey = Boolean.parseBoolean(commandline.getOptionValue("randomkey"));
             }
 
             if (commandline.hasOption("transactionspercommit")) {
