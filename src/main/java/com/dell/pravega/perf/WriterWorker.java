@@ -30,7 +30,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 isRandomKey, messageSize, start,
                 stats, streamName, 0);
         this.eCnt = new EventsController(start, eventsPerSec);
-        perf = secondsToRun > 0 ? new throughputWriter() : new eventsWriter();
+        perf = secondsToRun > 0 ? new EventsWriterTime() : new EventsWriter();
     }
 
     /**
@@ -52,16 +52,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         return null;
     }
 
-    private class eventsWriter implements performance {
+    private class EventsWriter implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            Random rand = new Random();
+            // Construct event payload
+            String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+            String payload = String.format("%-" + messageSize + "s", val);
 
             for (int i = 0; i < events; i++) {
-
-                // Construct event payload
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                String payload = String.format("%-" + messageSize + "s", val);
                 recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
 
@@ -72,15 +70,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         }
     }
 
-    private class throughputWriter implements performance {
+    private class EventsWriterTime implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            Random rand = new Random();
+            // Construct event payload
+            String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+            String payload = String.format("%-" + messageSize + "s", val);
 
             for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
-                // Construct event payload
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                String payload = String.format("%-" + messageSize + "s", val);
                 recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
             }
