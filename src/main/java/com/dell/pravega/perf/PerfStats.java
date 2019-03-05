@@ -25,7 +25,7 @@ import org.apache.commons.csv.CSVPrinter;
  * class for Performance statistics.
  */
 public class PerfStats {
-    private final static int maxRecords = 100000000;
+    private final static int maxRecords = 200000000;
     final private int messageSize;
     final private String action;
     private long start;
@@ -121,16 +121,18 @@ public class PerfStats {
     }
 
     public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) throws IOException {
-        this.action = action;
+        this.latencies = new int[maxRecords];
         this.start = System.currentTimeMillis();
         this.count = 0;
-        this.latencies = new int[maxRecords];
+        this.bytes = 0;
         this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
-        this.windowInterval = reportingInterval;
-        this.messageSize = messageSize;
         this.window = new TimeWindow(this.start);
+
+        this.action = action;
+        this.messageSize = messageSize;
+        this.windowInterval = reportingInterval;
         this.queue = new ConcurrentLinkedQueue<TimeStamp>();
         this.executor = new ForkJoinPool(1);
         if (csvFile != null) {
@@ -173,7 +175,7 @@ public class PerfStats {
         this.latencies[index] = (int) latency;
         this.index++;
         if (this.index >= maxRecords) {
-            reset(System.currentTimeMillis());
+            reset();
         }
         if (this.printer != null) {
             try {
@@ -222,15 +224,18 @@ public class PerfStats {
     }
 
 
-    private void reset(long time) {
+    private void reset() {
+        final long time = System.currentTimeMillis();
         this.window.print(time);
         printTillNow(time);
-        this.start = time;
+        this.start = System.currentTimeMillis();
         this.count = 0;
+        this.bytes = 0;
         this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
-        this.window = new TimeWindow(this.start);
+        this.window = new TimeWindow(time);
+
     }
 
     /**
