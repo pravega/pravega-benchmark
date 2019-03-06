@@ -128,7 +128,7 @@ public class PravegaPerfTest {
                 } else {
                     produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
                 }
-                eventsPerWorker = events / producerCount;
+                eventsPerWorker = (events + producerCount - 1) / producerCount;
                 if (throughput == 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
                 } else if (throughput > 0) {
