@@ -23,8 +23,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     ReaderWorker(int readerId, int events, int secondsToRun, long start,
                  PerfStats stats, String readergrp, int timeout) {
         super(readerId, events, secondsToRun,
-                false, 0, start,
-                stats, readergrp, timeout);
+                 0, start, stats, readergrp, timeout);
         perf = secondsToRun > 0 ? new eventstimeReader() : new eventsReader();
     }
 

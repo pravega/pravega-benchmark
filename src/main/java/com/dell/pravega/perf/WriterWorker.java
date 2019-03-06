@@ -27,8 +27,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                  PerfStats stats, String streamName, int eventsPerSec) {
 
         super(sensorId, events, secondsToRun,
-                isRandomKey, messageSize, start,
-                stats, streamName, 0);
+                messageSize, start, stats,
+                streamName, 0);
         this.eCnt = new EventsController(start, eventsPerSec);
         perf = secondsToRun > 0 ? new EventsWriterTime() : new EventsWriter();
     }
