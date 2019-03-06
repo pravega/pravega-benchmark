@@ -26,7 +26,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                 0, start, stats, readergrp, timeout);
 
         perf = secondsToRun > 0 ? (wNr ? new EventsTimeReaderRW() : new EventsTimeReader()) :
-                (wNr ? new EventsTimeReaderRW() : new EventsReader());
+                (wNr ? new EventsReaderRW() : new EventsReader());
 
     }
 

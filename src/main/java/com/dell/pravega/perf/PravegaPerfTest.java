@@ -121,26 +121,6 @@ public class PravegaPerfTest {
             factory = new ClientFactoryImpl(scopeName, controller);
             final long startTime = System.currentTimeMillis();
 
-            if (consumerCount > 0) {
-                readerGroup = streamHandle.createReaderGroup();
-                String action;
-                if (writeNread) {
-                    action = "Write/Reading";
-                } else {
-                    action = "Reading";
-                }
-                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
-                readers = IntStream.range(0, consumerCount)
-                        .boxed()
-                        .map(i -> new PravegaReaderWorker(i, events,
-                                runtimeSec, startTime, consumeStats,
-                                streamName, timeout, writeNread, factory))
-                        .collect(Collectors.toList());
-            } else {
-                readers = null;
-                consumeStats = null;
-            }
-
             if (producerCount > 0) {
                 if (writeNread) {
                     produceStats = null;
@@ -177,6 +157,26 @@ public class PravegaPerfTest {
             } else {
                 writers = null;
                 produceStats = null;
+            }
+
+            if (consumerCount > 0) {
+                readerGroup = streamHandle.createReaderGroup();
+                String action;
+                if (writeNread) {
+                    action = "Write/Reading";
+                } else {
+                    action = "Reading";
+                }
+                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
+                readers = IntStream.range(0, consumerCount)
+                        .boxed()
+                        .map(i -> new PravegaReaderWorker(i, events,
+                                runtimeSec, startTime, consumeStats,
+                                streamName, timeout, writeNread, factory))
+                        .collect(Collectors.toList());
+            } else {
+                readers = null;
+                consumeStats = null;
             }
 
             final List<Callable<Void>> workers = Stream.of(readers, writers)
