@@ -55,6 +55,7 @@ public class PravegaPerfTest {
     private static int segmentCount = 0;
     private static int events = 3000;
     private static int eventsPerSec = 0;
+    private static int eventsPerWorker = 0;
     private static int transactionPerCommit = 0;
     private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
@@ -127,7 +128,7 @@ public class PravegaPerfTest {
                 } else {
                     produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
                 }
-
+                eventsPerWorker = events / producerCount;
                 if (throughput == 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
                 } else if (throughput > 0) {
@@ -137,7 +138,7 @@ public class PravegaPerfTest {
                 if (transactionPerCommit > 0) {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
-                            .map(i -> new PravegaTransactionWriterWorker(i, events,
+                            .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
@@ -168,9 +169,10 @@ public class PravegaPerfTest {
                     action = "Reading";
                 }
                 consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
+                eventsPerWorker = events / consumerCount;
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
-                        .map(i -> new PravegaReaderWorker(i, events,
+                        .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
                                 runtimeSec, startTime, consumeStats,
                                 streamName, timeout, writeNread, factory))
                         .collect(Collectors.toList());
@@ -231,7 +233,7 @@ public class PravegaPerfTest {
         options.addOption("producers", true, "number of producers");
         options.addOption("consumers", true, "number of consumers");
         options.addOption("events", true,
-                "number of events/records per producer/consumer if 'time' not specified;\n" +
+                "number of events/records if 'time' not specified;\n" +
                         "otherwise, maximum events per second by producer(s)" +
                         "and/or number of events per consumer");
         options.addOption("time", true, "number of seconds the code runs");
