@@ -49,6 +49,7 @@ public class PravegaPerfTest {
     private static String streamName = StartLocalService.STREAM_NAME;
     private static String scopeName = StartLocalService.SCOPE;
     private static boolean recreate = false;
+    private static boolean writeNread = false;
     private static int producerCount = 0;
     private static int consumerCount = 0;
     private static int segmentCount = 0;
@@ -59,7 +60,8 @@ public class PravegaPerfTest {
     private static final int reportingInterval = 5000;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool fjexecutor;
-    private static PerfStats produceStats, consumeStats;
+    private static PerfStats produceStats = null;
+    private static PerfStats consumeStats = null;
     private static double throughput = 0;
     private static String writeFile = null;
     private static String readFile = null;
@@ -84,8 +86,17 @@ public class PravegaPerfTest {
             System.exit(1);
         }
 
+        if (writeNread) {
+            if (producerCount == 0 || consumerCount == 0) {
+                System.out.println("Error: Must specify both the number of producers and Consumers for write and read option");
+                System.exit(1);
+            }
+            recreate = true;
+        }
+
         bgexecutor = Executors.newScheduledThreadPool(10);
         fjexecutor = new ForkJoinPool();
+
 
         try {
 
@@ -112,12 +123,18 @@ public class PravegaPerfTest {
 
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup();
-                consumeStats = new PerfStats("Reading", reportingInterval, messageSize, readFile);
+                String action;
+                if (writeNread) {
+                    action = "Write/Reading";
+                } else {
+                    action = "Reading";
+                }
+                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, events,
                                 runtimeSec, startTime, consumeStats,
-                                streamName, timeout, factory))
+                                streamName, timeout, writeNread, factory))
                         .collect(Collectors.toList());
             } else {
                 readers = null;
@@ -125,8 +142,12 @@ public class PravegaPerfTest {
             }
 
             if (producerCount > 0) {
+                if (writeNread) {
+                    produceStats = null;
+                } else {
+                    produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
+                }
 
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
                 if (throughput == 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
                 } else if (throughput > 0) {
@@ -140,7 +161,7 @@ public class PravegaPerfTest {
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
-                                    eventsPerSec, factory,
+                                    eventsPerSec, writeNread, factory,
                                     transactionPerCommit))
                             .collect(Collectors.toList());
                 } else {
@@ -150,7 +171,7 @@ public class PravegaPerfTest {
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
-                                    eventsPerSec, factory))
+                                    eventsPerSec, writeNread, factory))
                             .collect(Collectors.toList());
                 }
             } else {
@@ -222,6 +243,8 @@ public class PravegaPerfTest {
         options.addOption("segments", true, "Number of segments");
         options.addOption("recreate", true,
                 "If the stream is already existing, delete it and recreate it");
+        options.addOption("wr", true,
+                "write and read on newly created stream; print the read performance results only");
 
         options.addOption("throughput", true,
                 "if > 0 , throughput in MB/s\n" +
@@ -281,6 +304,10 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("recreate")) {
                 recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
+            }
+
+            if (commandline.hasOption("wr")) {
+                writeNread = Boolean.parseBoolean(commandline.getOptionValue("wr"));
             }
 
             if (commandline.hasOption("throughput")) {

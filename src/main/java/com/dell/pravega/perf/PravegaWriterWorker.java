@@ -27,11 +27,12 @@ public class PravegaWriterWorker extends WriterWorker {
 
     PravegaWriterWorker(int sensorId, int events, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
-                        PerfStats stats, String streamName, int eventsPerSec, ClientFactory factory) {
+                        PerfStats stats, String streamName, int eventsPerSec,
+                        boolean wNr, ClientFactory factory) {
 
         super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec);
+                stats, streamName, eventsPerSec, wNr);
 
         this.producer = factory.createEventWriter(streamName,
                 new UTF8StringSerializer(),
@@ -51,6 +52,11 @@ public class PravegaWriterWorker extends WriterWorker {
                 record.accept(startTime, System.currentTimeMillis(), messageSize);
             });
         }
+    }
+
+    @Override
+    public void writeData(String data) {
+        producer.writeEvent(data);
     }
 
     @Override

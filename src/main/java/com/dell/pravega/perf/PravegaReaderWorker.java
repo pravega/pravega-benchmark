@@ -26,8 +26,8 @@ public class PravegaReaderWorker extends ReaderWorker {
 
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
                         long start, PerfStats stats, String readergrp,
-                        int timeout, ClientFactory factory) {
-        super(readerId, events, secondsToRun, start, stats, readergrp, timeout);
+                        int timeout, boolean wNr, ClientFactory factory) {
+        super(readerId, events, secondsToRun, start, stats, readergrp, timeout, wNr);
 
         this.readerId = Integer.toString(readerId);
         reader = factory.createReader(

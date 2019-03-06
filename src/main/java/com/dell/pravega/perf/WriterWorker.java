@@ -24,13 +24,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, int eventsPerSec) {
+                 PerfStats stats, String streamName, int eventsPerSec, boolean wNr) {
 
         super(sensorId, events, secondsToRun,
                 messageSize, start, stats,
                 streamName, 0);
         this.eCnt = new EventsController(start, eventsPerSec);
-        perf = secondsToRun > 0 ? new EventsWriterTime() : new EventsWriter();
+        perf = secondsToRun > 0 ? (wNr ? new EventsWriterTimeRW() : new EventsWriterTime()) :
+                (wNr ? new EventsWriterRW() : new EventsWriter());
     }
 
     /**
@@ -40,6 +41,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      * @param record to call for benchmarking
      */
     public abstract void recordWrite(String data, TriConsumer record);
+
+    /**
+     * writes the data and benchmark
+     *
+     * @param data data to write
+     */
+    public abstract void writeData(String data);
+
 
     /**
      * flush the producer data.
@@ -60,15 +69,30 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             String payload = String.format("%-" + messageSize + "s", val);
 
             for (int i = 0; i < events; i++) {
+                writeData(payload);
+                eCnt.control(i);
+            }
+            flush();
+        }
+    }
+
+    private class EventsWriterRW implements performance {
+
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
+            for (int i = 0; i < events; i++) {
+                // Construct event payload
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+                String payload = String.format("%-" + messageSize + "s", val);
+
                 recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
-
             }
 
             flush();
 
         }
     }
+
 
     private class EventsWriterTime implements performance {
 
@@ -85,4 +109,22 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             flush();
         }
     }
+
+    private class EventsWriterTimeRW implements performance {
+
+        public void benchmark() throws InterruptedException, ExecutionException, IOException {
+            for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
+                // Construct event payload
+                long start = System.currentTimeMillis();
+                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+                String payload = String.format("%-" + messageSize + "s", val);
+                writeData(payload);
+                eCnt.control(i);
+            }
+
+            flush();
+        }
+    }
+
+
 }
