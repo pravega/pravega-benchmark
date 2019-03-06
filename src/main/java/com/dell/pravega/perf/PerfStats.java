@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -25,7 +26,7 @@ import org.apache.commons.csv.CSVPrinter;
  * class for Performance statistics.
  */
 public class PerfStats {
-    private final static int maxRecords = 200000000;
+    private final static int maxRecords = 1000000000;
     final private int messageSize;
     final private String action;
     private long start;
@@ -33,7 +34,7 @@ public class PerfStats {
     private int index;
     private long count;
     private long bytes;
-    private long maxLatency;
+    private int maxLatency;
     private long totalLatency;
     final private long windowInterval;
     private TimeWindow window;
@@ -65,7 +66,7 @@ public class PerfStats {
         private long lastTime;
         private long count;
         private long bytes;
-        private long maxLatency;
+        private int maxLatency;
         private long totalLatency;
 
         public TimeWindow(long start) {
@@ -83,7 +84,7 @@ public class PerfStats {
          * @param latency latency in ms.
          * @param bytes   number of bytes.
          */
-        public void record(long latency, long bytes) {
+        public void record(int latency, long bytes) {
             this.count++;
             this.totalLatency += latency;
             this.bytes += bytes;
@@ -155,6 +156,8 @@ public class PerfStats {
                     t = queue.poll();
                     if (t != null) {
                         record(t.bytes, t.start, t.end);
+                    } else {
+                        LockSupport.parkNanos(100);
                     }
                     print();
                 } catch (IOException ex) {
@@ -166,13 +169,13 @@ public class PerfStats {
 
 
     private void record(int bytes, long startTime, long endTime) {
-        final long latency = endTime - startTime;
+        final int latency = (int) (endTime - startTime);
         this.count++;
         this.bytes += bytes;
         this.totalLatency += latency;
         this.maxLatency = Math.max(this.maxLatency, latency);
         window.record(latency, bytes);
-        this.latencies[index] = (int) latency;
+        this.latencies[index] = latency;
         this.index++;
         if (this.index >= maxRecords) {
             reset();
@@ -240,7 +243,7 @@ public class PerfStats {
 
     /**
      * print the final performance statistics.
-     * @param endTime   End time
+     * @param endTime End time
      */
     public void printTotal(long endTime) {
         executor.shutdownNow();

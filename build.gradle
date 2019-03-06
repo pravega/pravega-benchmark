@@ -24,6 +24,9 @@ buildscript {
 
         runtime "org.slf4j:slf4j-simple:1.7.14"
     }
+
+applicationDefaultJvmArgs = ['-Xms32g']
+
 mainClassName = "com.dell.pravega.perf.PravegaPerfTest"
 startScripts {
     doLast {
