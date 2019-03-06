@@ -71,7 +71,9 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                 for (int i = 0; i < events; i++) {
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(Long.parseLong(ret.split(",")[0]), System.currentTimeMillis(), ret.length());
+                        final long endTime = System.currentTimeMillis();
+                        final long startTime = Long.parseLong(ret.split(",")[0]);
+                        stats.recordTime(startTime, endTime, ret.length());
                     }
                 }
             } finally {
@@ -107,8 +109,9 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                 while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
                     ret = readData();
                     if (ret != null) {
-                        long start = Long.parseLong(ret.split(",")[0]);
-                        stats.recordTime(start, System.currentTimeMillis(), ret.length());
+                        final long endTime = System.currentTimeMillis();
+                        final long startTime = Long.parseLong(ret.split(",")[0]);
+                        stats.recordTime(startTime, endTime, ret.length());
                     }
                 }
             } finally {
