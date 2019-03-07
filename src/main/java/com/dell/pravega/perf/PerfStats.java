@@ -11,12 +11,13 @@ package com.dell.pravega.perf;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -26,12 +27,10 @@ import org.apache.commons.csv.CSVPrinter;
  * class for Performance statistics.
  */
 public class PerfStats {
-    private final static int maxRecords = 1000000000;
+    private final static int maxRecords = 100000000;
     final private int messageSize;
     final private String action;
     private long start;
-    private int[] latencies;
-    private int index;
     private long count;
     private long bytes;
     private int maxLatency;
@@ -41,6 +40,7 @@ public class PerfStats {
     final private CSVPrinter printer;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
     final private ForkJoinPool executor;
+    final private LatencyWriter latencyRecorder;
 
 
     /**
@@ -121,12 +121,79 @@ public class PerfStats {
         }
     }
 
+    private abstract class LatencyWriter {
+        String action;
+
+        public LatencyWriter(String action) {
+            this.action = action;
+        }
+
+        public abstract void record(int bytes, long start, int latency);
+
+        public abstract void printPercentiles();
+
+        public int[] getPercentiles(int[] latencies, int count, double... percentiles) {
+            int size = Math.min(count, latencies.length);
+            Arrays.sort(latencies, 0, size);
+            int[] values = new int[percentiles.length];
+            for (int i = 0; i < percentiles.length; i++) {
+                int index = (int) (percentiles[i] * size);
+                values[i] = latencies[index];
+            }
+            return values;
+        }
+    }
+
+
+    private class MemoryLatencyWriter extends LatencyWriter {
+        private int[] latencies;
+        private int size;
+        private int index;
+        private BufferedWriter writer;
+
+        public MemoryLatencyWriter(String action, int size) {
+            super(action);
+            this.size = size;
+            this.index = 0;
+            this.latencies = new int[size];
+            writer = new BufferedWriter(new OutputStreamWriter(System.out));
+        }
+
+        private void recordPercentiles(double... percentiles) {
+            int[] percs = getPercentiles(this.latencies, index, percentiles);
+            String output = String.format("%d records %s, latency percentiles: %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                    index, action, percs[0], percs[1], percs[2], percs[3]);
+            try {
+                writer.write(output);
+            } catch (IOException ex) {
+                System.out.printf(output);
+            }
+
+        }
+
+        public void record(int bytes, long start, int latency) {
+            this.latencies[index] = latency;
+            this.index++;
+            if (this.index >= size) {
+                recordPercentiles(0.5, 0.95, 0.99, 0.999);
+            }
+        }
+
+        public void printPercentiles() {
+            recordPercentiles(0.5, 0.95, 0.99, 0.999);
+            try {
+                writer.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+
+    }
+
     public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) throws IOException {
-        this.latencies = new int[maxRecords];
         this.start = System.currentTimeMillis();
         this.count = 0;
         this.bytes = 0;
-        this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
         this.window = null;
@@ -136,6 +203,7 @@ public class PerfStats {
         this.windowInterval = reportingInterval;
         this.queue = new ConcurrentLinkedQueue<TimeStamp>();
         this.executor = new ForkJoinPool(1);
+        this.latencyRecorder = new MemoryLatencyWriter(action, maxRecords);
         if (csvFile != null) {
             this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
                     .withHeader("event size (bytes)", "Start Time (Milliseconds)", action + " Latency (Milliseconds)"));
@@ -174,11 +242,8 @@ public class PerfStats {
         this.totalLatency += latency;
         this.maxLatency = Math.max(this.maxLatency, latency);
         window.record(latency, bytes);
-        this.latencies[index] = latency;
-        this.index++;
-        if (this.index >= maxRecords) {
-            reset();
-        }
+        latencyRecorder.record(bytes, startTime, latency);
+
         if (this.printer != null) {
             try {
                 printer.printRecord(bytes, startTime, latency);
@@ -186,17 +251,6 @@ public class PerfStats {
                 ex.printStackTrace();
             }
         }
-    }
-
-    private static long[] percentiles(int[] latencies, int count, double... percentiles) {
-        int size = Math.min(count, latencies.length);
-        Arrays.sort(latencies, 0, size);
-        long[] values = new long[percentiles.length];
-        for (int i = 0; i < percentiles.length; i++) {
-            int index = (int) (percentiles[i] * size);
-            values[i] = latencies[index];
-        }
-        return values;
     }
 
     /**
@@ -218,30 +272,14 @@ public class PerfStats {
         final double recsPerSec = count / elapsed;
         final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
-        long[] percs = percentiles(this.latencies, index, 0.5, 0.95, 0.99, 0.999);
         System.out.printf(
-                "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency, %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
-                count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
-                percs[0], percs[1], percs[2], percs[3]);
-    }
-
-
-    private void reset() {
-        final long time = System.currentTimeMillis();
-        this.window.print(time);
-        printTillNow(time);
-        this.start = System.currentTimeMillis();
-        this.count = 0;
-        this.bytes = 0;
-        this.index = 0;
-        this.maxLatency = 0;
-        this.totalLatency = 0;
-        this.window = new TimeWindow(time);
-
+                "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency.\n",
+                count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency);
     }
 
     /**
      * start the performance statistics.
+     *
      * @param startTime start time time
      */
     public void start(long startTime) {
@@ -253,12 +291,14 @@ public class PerfStats {
 
     /**
      * end the final performance statistics.
+     *
      * @param endTime End time
      */
     public void shutdown(long endTime) {
         executor.shutdownNow();
         queue.clear();
         printTillNow(endTime);
+        latencyRecorder.printPercentiles();
         if (printer != null) {
             try {
                 printer.close();
