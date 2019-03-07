@@ -10,6 +10,7 @@
 package com.dell.pravega.perf;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ForkJoinPool;
@@ -21,6 +22,8 @@ import java.io.OutputStreamWriter;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
 
 /**
@@ -37,7 +40,6 @@ public class PerfStats {
     private long totalLatency;
     final private long windowInterval;
     private TimeWindow window;
-    final private CSVPrinter printer;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
     final private ForkJoinPool executor;
     final private LatencyWriter latencyRecorder;
@@ -147,9 +149,9 @@ public class PerfStats {
 
     private class MemoryLatencyWriter extends LatencyWriter {
         private int[] latencies;
-        private int size;
         private int index;
-        private BufferedWriter writer;
+        final private int size;
+        final private BufferedWriter writer;
 
         public MemoryLatencyWriter(String action, int size) {
             super(action);
@@ -168,7 +170,6 @@ public class PerfStats {
             } catch (IOException ex) {
                 System.out.printf(output);
             }
-
         }
 
         public void record(int bytes, long start, int latency) {
@@ -190,6 +191,56 @@ public class PerfStats {
 
     }
 
+
+    private class CSVLatencyWriter extends LatencyWriter {
+        final private String csvFile;
+        final private CSVPrinter csvPrinter;
+
+        public CSVLatencyWriter(String action, String csvFile) throws IOException {
+            super(action);
+            this.csvFile = csvFile;
+            csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
+                    .withHeader("event size (bytes)", "Start Time (Milliseconds)", action + "Latency (Milliseconds)"));
+        }
+
+        public void record(int bytes, long start, int latency) {
+            try {
+                csvPrinter.printRecord(bytes, start, latency);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        public void printPercentiles() {
+            try {
+                csvPrinter.close();
+                final ArrayList<Integer> latenciesList = readCSV();
+                final int[] latencies = latenciesList.stream().mapToInt(i -> i).toArray();
+                int[] percs = getPercentiles(latencies, latencies.length, 0.5, 0.95, 0.99, 0.999);
+                System.out.printf("%d records %s, latency percentiles: %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                        latencies.length, action, percs[0], percs[1], percs[2], percs[3]);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        private ArrayList<Integer> readCSV() {
+            ArrayList<Integer> latencies = new ArrayList<Integer>();
+            try {
+                CSVParser csvParser = new CSVParser(Files.newBufferedReader(Paths.get(csvFile)), CSVFormat.DEFAULT
+                        .withFirstRecordAsHeader().withIgnoreHeaderCase().withTrim());
+
+                for (CSVRecord record : csvParser) {
+                    latencies.add(Integer.parseInt(record.get(2)));
+                }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+            return latencies;
+        }
+
+    }
+
     public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) throws IOException {
         this.start = System.currentTimeMillis();
         this.count = 0;
@@ -203,13 +254,7 @@ public class PerfStats {
         this.windowInterval = reportingInterval;
         this.queue = new ConcurrentLinkedQueue<TimeStamp>();
         this.executor = new ForkJoinPool(1);
-        this.latencyRecorder = new MemoryLatencyWriter(action, maxRecords);
-        if (csvFile != null) {
-            this.printer = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                    .withHeader("event size (bytes)", "Start Time (Milliseconds)", action + " Latency (Milliseconds)"));
-        } else {
-            this.printer = null;
-        }
+        this.latencyRecorder = csvFile == null ? new MemoryLatencyWriter(action, maxRecords) : new CSVLatencyWriter(action, csvFile);
     }
 
     /**
@@ -243,14 +288,6 @@ public class PerfStats {
         this.maxLatency = Math.max(this.maxLatency, latency);
         window.record(latency, bytes);
         latencyRecorder.record(bytes, startTime, latency);
-
-        if (this.printer != null) {
-            try {
-                printer.printRecord(bytes, startTime, latency);
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
-        }
     }
 
     /**
@@ -261,9 +298,6 @@ public class PerfStats {
         if (window.windowTimeMS(time) >= windowInterval) {
             window.print(time);
             this.window = new TimeWindow(time);
-            if (printer != null) {
-                printer.flush();
-            }
         }
     }
 
@@ -299,13 +333,6 @@ public class PerfStats {
         queue.clear();
         printTillNow(endTime);
         latencyRecorder.printPercentiles();
-        if (printer != null) {
-            try {
-                printer.close();
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
-        }
     }
 
     /**
