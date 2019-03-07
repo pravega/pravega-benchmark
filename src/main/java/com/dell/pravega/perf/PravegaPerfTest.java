@@ -75,6 +75,7 @@ public class PravegaPerfTest {
 
         final List<Callable<Void>> readers;
         final List<Callable<Void>> writers;
+        final long startTime = System.currentTimeMillis();
 
         try {
             parseCmdLine(args);
@@ -120,7 +121,6 @@ public class PravegaPerfTest {
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);
-            final long startTime = System.currentTimeMillis();
 
             if (producerCount > 0) {
                 if (writeNread) {
@@ -148,7 +148,7 @@ public class PravegaPerfTest {
                 } else {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
-                            .map(i -> new PravegaWriterWorker(i, events,
+                            .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
