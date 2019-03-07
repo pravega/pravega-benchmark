@@ -163,8 +163,8 @@ public class PerfStats {
 
         private void recordPercentiles(double... percentiles) {
             int[] percs = getPercentiles(this.latencies, index, percentiles);
-            String output = String.format("%d records %s, latency percentiles: %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
-                    index, action, percs[0], percs[1], percs[2], percs[3]);
+            String output = String.format("%d records %s, latency percentiles: %d ms 50th, %d ms 75th,%d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                    index, action, percs[0], percs[1], percs[2], percs[3], percs[4]);
             try {
                 writer.write(output);
             } catch (IOException ex) {
@@ -176,12 +176,12 @@ public class PerfStats {
             this.latencies[index] = latency;
             this.index++;
             if (this.index >= size) {
-                recordPercentiles(0.5, 0.95, 0.99, 0.999);
+                recordPercentiles(0.5, 0.75, 0.95, 0.99, 0.999);
             }
         }
 
         public void printPercentiles() {
-            recordPercentiles(0.5, 0.95, 0.99, 0.999);
+            recordPercentiles(0.5, 0.75, 0.95, 0.99, 0.999);
             try {
                 writer.close();
             } catch (IOException ex) {
@@ -216,9 +216,9 @@ public class PerfStats {
                 csvPrinter.close();
                 final ArrayList<Integer> latenciesList = readCSV();
                 final int[] latencies = latenciesList.stream().mapToInt(i -> i).toArray();
-                int[] percs = getPercentiles(latencies, latencies.length, 0.5, 0.95, 0.99, 0.999);
-                System.out.printf("%d records %s, latency percentiles: %d ms 50th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
-                        latencies.length, action, percs[0], percs[1], percs[2], percs[3]);
+                int[] percs = getPercentiles(latencies, latencies.length, 0.5, 0.75, 0.95, 0.99, 0.999);
+                System.out.printf("%d records %s, latency percentiles: %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+                        latencies.length, action, percs[0], percs[1], percs[2], percs[3], percs[4]);
             } catch (IOException ex) {
                 ex.printStackTrace();
             }
