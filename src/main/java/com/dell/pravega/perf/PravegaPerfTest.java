@@ -28,11 +28,8 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 
 import java.net.URI;
-import java.util.concurrent.Callable;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ForkJoinPool;
+import java.net.URISyntaxException;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.List;
 import java.util.stream.Stream;
@@ -66,16 +63,16 @@ public class PravegaPerfTest {
     private static double throughput = 0;
     private static String writeFile = null;
     private static String readFile = null;
+    private static ReaderGroup readerGroup = null;
+    private static final int timeout = 10;
+    private static ClientFactory factory = null;
+    private static ControllerImpl controller = null;
+    private static List<Callable<Void>> readers = null;
+    private static List<Callable<Void>> writers = null;
+    private static long startTime;
 
     public static void main(String[] args) {
-        ReaderGroup readerGroup = null;
-        final int timeout = 10;
-        final ClientFactory factory;
-        ControllerImpl controller = null;
-
-        final List<Callable<Void>> readers;
-        final List<Callable<Void>> writers;
-        final long startTime = System.currentTimeMillis();
+        startTime = System.currentTimeMillis();
 
         try {
             parseCmdLine(args);
@@ -101,86 +98,7 @@ public class PravegaPerfTest {
 
 
         try {
-
-            controller = new ControllerImpl(ControllerImplConfig.builder()
-                    .clientConfig(ClientConfig.builder()
-                            .controllerURI(new URI(controllerUri)).build())
-                    .maxBackoffMillis(5000).build(),
-                    bgexecutor);
-
-            PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
-                    segmentCount, timeout, controller,
-                    bgexecutor);
-
-            if (producerCount > 0 && !streamHandle.create()) {
-                if (recreate) {
-                    streamHandle.recreate();
-                } else {
-                    streamHandle.scale();
-                }
-            }
-
-            factory = new ClientFactoryImpl(scopeName, controller);
-
-            if (producerCount > 0) {
-                if (writeNread) {
-                    produceStats = null;
-                } else {
-                    produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
-                }
-                eventsPerWorker = (events + producerCount - 1) / producerCount;
-                if (throughput == 0 && runtimeSec > 0) {
-                    eventsPerSec = events / producerCount;
-                } else if (throughput > 0) {
-                    eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
-                }
-
-                if (transactionPerCommit > 0) {
-                    writers = IntStream.range(0, producerCount)
-                            .boxed()
-                            .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
-                                    runtimeSec, false,
-                                    messageSize, startTime,
-                                    produceStats, streamName,
-                                    eventsPerSec, writeNread, factory,
-                                    transactionPerCommit))
-                            .collect(Collectors.toList());
-                } else {
-                    writers = IntStream.range(0, producerCount)
-                            .boxed()
-                            .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
-                                    runtimeSec, false,
-                                    messageSize, startTime,
-                                    produceStats, streamName,
-                                    eventsPerSec, writeNread, factory))
-                            .collect(Collectors.toList());
-                }
-            } else {
-                writers = null;
-                produceStats = null;
-            }
-
-            if (consumerCount > 0) {
-                readerGroup = streamHandle.createReaderGroup();
-                String action;
-                if (writeNread) {
-                    action = "Write/Reading";
-                } else {
-                    action = "Reading";
-                }
-                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
-                eventsPerWorker = events / consumerCount;
-                readers = IntStream.range(0, consumerCount)
-                        .boxed()
-                        .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
-                                runtimeSec, startTime, consumeStats,
-                                streamName, timeout, writeNread, factory))
-                        .collect(Collectors.toList());
-            } else {
-                readers = null;
-                consumeStats = null;
-            }
-
+            setupPravega();
             final List<Callable<Void>> workers = Stream.of(readers, writers)
                     .filter(x -> x != null)
                     .flatMap(x -> x.stream())
@@ -206,6 +124,88 @@ public class PravegaPerfTest {
         }
         shutdown();
         System.exit(0);
+    }
+
+    private static void setupPravega() throws
+            URISyntaxException, InterruptedException, ReinitializationRequiredException, ExecutionException, TimeoutException, Exception {
+        controller = new ControllerImpl(ControllerImplConfig.builder()
+                .clientConfig(ClientConfig.builder()
+                        .controllerURI(new URI(controllerUri)).build())
+                .maxBackoffMillis(5000).build(),
+                bgexecutor);
+
+        PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
+                segmentCount, timeout, controller,
+                bgexecutor);
+
+        if (producerCount > 0 && !streamHandle.create()) {
+            if (recreate) {
+                streamHandle.recreate();
+            } else {
+                streamHandle.scale();
+            }
+        }
+
+        factory = new ClientFactoryImpl(scopeName, controller);
+
+        if (producerCount > 0) {
+            if (writeNread) {
+                produceStats = null;
+            } else {
+                produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
+            }
+            eventsPerWorker = (events + producerCount - 1) / producerCount;
+            if (throughput == 0 && runtimeSec > 0) {
+                eventsPerSec = events / producerCount;
+            } else if (throughput > 0) {
+                eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
+            }
+
+            if (transactionPerCommit > 0) {
+                writers = IntStream.range(0, producerCount)
+                        .boxed()
+                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
+                                runtimeSec, false,
+                                messageSize, startTime,
+                                produceStats, streamName,
+                                eventsPerSec, writeNread, factory,
+                                transactionPerCommit))
+                        .collect(Collectors.toList());
+            } else {
+                writers = IntStream.range(0, producerCount)
+                        .boxed()
+                        .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
+                                runtimeSec, false,
+                                messageSize, startTime,
+                                produceStats, streamName,
+                                eventsPerSec, writeNread, factory))
+                        .collect(Collectors.toList());
+            }
+        } else {
+            writers = null;
+            produceStats = null;
+        }
+
+        if (consumerCount > 0) {
+            readerGroup = streamHandle.createReaderGroup();
+            String action;
+            if (writeNread) {
+                action = "Write/Reading";
+            } else {
+                action = "Reading";
+            }
+            consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
+            eventsPerWorker = events / consumerCount;
+            readers = IntStream.range(0, consumerCount)
+                    .boxed()
+                    .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
+                            runtimeSec, startTime, consumeStats,
+                            streamName, timeout, writeNread, factory))
+                    .collect(Collectors.toList());
+        } else {
+            readers = null;
+            consumeStats = null;
+        }
     }
 
     private static synchronized void shutdown() {
