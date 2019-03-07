@@ -197,6 +197,14 @@ public class PravegaPerfTest {
                 }
             });
 
+            final long beginTime = System.currentTimeMillis();
+            if (consumeStats != null) {
+                consumeStats.start(beginTime);
+            }
+            if (produceStats != null) {
+                produceStats.start(beginTime);
+            }
+
             fjexecutor.invokeAll(workers);
             shutdown();
         } catch (Exception e) {
@@ -215,11 +223,11 @@ public class PravegaPerfTest {
         fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
         fjexecutor = null;
         if (produceStats != null) {
-            produceStats.printTotal(endTime);
+            produceStats.shutdown(endTime);
         }
 
         if (consumeStats != null) {
-            consumeStats.printTotal(endTime);
+            consumeStats.shutdown(endTime);
         }
     }
 

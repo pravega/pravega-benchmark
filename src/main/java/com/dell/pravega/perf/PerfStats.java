@@ -129,7 +129,7 @@ public class PerfStats {
         this.index = 0;
         this.maxLatency = 0;
         this.totalLatency = 0;
-        this.window = new TimeWindow(this.start);
+        this.window = null;
 
         this.action = action;
         this.messageSize = messageSize;
@@ -142,7 +142,6 @@ public class PerfStats {
         } else {
             this.printer = null;
         }
-        executor.execute(new ProcessQueue());
     }
 
     /**
@@ -242,11 +241,23 @@ public class PerfStats {
     }
 
     /**
-     * print the final performance statistics.
+     * start the performance statistics.
+     * @param startTime start time time
+     */
+    public void start(long startTime) {
+        this.start = startTime;
+        this.window = new TimeWindow(startTime);
+        executor.execute(new ProcessQueue());
+    }
+
+
+    /**
+     * end the final performance statistics.
      * @param endTime End time
      */
-    public void printTotal(long endTime) {
+    public void shutdown(long endTime) {
         executor.shutdownNow();
+        queue.clear();
         printTillNow(endTime);
         if (printer != null) {
             try {
