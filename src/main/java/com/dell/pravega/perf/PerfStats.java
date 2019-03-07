@@ -163,7 +163,7 @@ public class PerfStats {
 
         private void recordPercentiles(double... percentiles) {
             int[] percs = getPercentiles(this.latencies, index, percentiles);
-            String output = String.format("%d records %s, latency percentiles: %d ms 50th, %d ms 75th,%d ms 95th, %d ms 99th, %d ms 99.9th.\n",
+            String output = String.format("%d records %s, latency percentiles: %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th.\n",
                     index, action, percs[0], percs[1], percs[2], percs[3], percs[4]);
             try {
                 writer.write(output);
