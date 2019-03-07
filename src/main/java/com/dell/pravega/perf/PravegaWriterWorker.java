@@ -41,17 +41,18 @@ public class PravegaWriterWorker extends WriterWorker {
 
 
     @Override
-    public void recordWrite(String data, TriConsumer record) {
+    public long recordWrite(String data, TriConsumer record) {
         CompletableFuture ret;
-        final long startTime = System.currentTimeMillis();
+        final long time = System.currentTimeMillis();
         ret = producer.writeEvent(data);
         if (ret == null) {
-            record.accept(startTime, System.currentTimeMillis(), messageSize);
+            record.accept(time, System.currentTimeMillis(), messageSize);
         } else {
             ret.thenAccept(d -> {
-                record.accept(startTime, System.currentTimeMillis(), messageSize);
+                record.accept(time, System.currentTimeMillis(), messageSize);
             });
         }
+        return time;
     }
 
     @Override

@@ -86,13 +86,14 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     private class EventsTimeReader implements performance {
         public void benchmark() throws IOException {
             String ret = null;
+            long time = System.currentTimeMillis();
             try {
 
-                while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
-                    final long startTime = System.currentTimeMillis();
+                while (((time - StartTime) / 1000) < secondsToRun) {
+                    time = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
+                        stats.recordTime(time, System.currentTimeMillis(), ret.length());
                     }
                 }
             } finally {
@@ -104,14 +105,15 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     private class EventsTimeReaderRW implements performance {
         public void benchmark() throws IOException {
             String ret = null;
+            long time = System.currentTimeMillis();
             try {
 
-                while (((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun) {
+                while (((time - StartTime) / 1000) < secondsToRun) {
                     ret = readData();
                     if (ret != null) {
-                        final long endTime = System.currentTimeMillis();
+                        time = System.currentTimeMillis();
                         final long startTime = Long.parseLong(ret.split(",")[0]);
-                        stats.recordTime(startTime, endTime, ret.length());
+                        stats.recordTime(startTime, time, ret.length());
                     }
                 }
             } finally {

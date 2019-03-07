@@ -39,8 +39,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      *
      * @param data   data to write
      * @param record to call for benchmarking
+     * @return time return the data sent time
      */
-    public abstract void recordWrite(String data, TriConsumer record);
+    public abstract long recordWrite(String data, TriConsumer record);
 
     /**
      * writes the data and benchmark
@@ -99,9 +100,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             // Construct event payload
             String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
             String payload = String.format("%-" + messageSize + "s", val);
+            long time = System.currentTimeMillis();
 
-            for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
-                recordWrite(payload, stats::recordTime);
+            for (int i = 0; ((time - StartTime) / 1000) < secondsToRun; i++) {
+                time = recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
             }
 
@@ -112,10 +114,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private class EventsWriterTimeRW implements performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            for (int i = 0; ((System.currentTimeMillis() - StartTime) / 1000) < secondsToRun; i++) {
-                // Construct event payload
-                long start = System.currentTimeMillis();
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
+            long time = System.currentTimeMillis();
+            for (int i = 0; ((time - StartTime) / 1000) < secondsToRun; i++) {
+                time = System.currentTimeMillis();
+                String val = time + ", " + workerID + ", " + (int) (Math.random() * 200);
                 String payload = String.format("%-" + messageSize + "s", val);
                 writeData(payload);
                 eCnt.control(i);

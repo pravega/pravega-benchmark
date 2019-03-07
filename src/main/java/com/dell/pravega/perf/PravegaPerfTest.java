@@ -188,12 +188,8 @@ public class PravegaPerfTest {
 
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 public void run() {
-                    try {
-                        System.out.println();
-                        shutdown();
-                    } catch (InterruptedException | IOException e) {
-                        e.printStackTrace();
-                    }
+                    System.out.println();
+                    shutdown();
                 }
             });
 
@@ -204,28 +200,29 @@ public class PravegaPerfTest {
             if (produceStats != null) {
                 produceStats.start(beginTime);
             }
-
             fjexecutor.invokeAll(workers);
-            shutdown();
         } catch (Exception e) {
             e.printStackTrace();
         }
-
+        shutdown();
         System.exit(0);
     }
 
-    private static synchronized void shutdown() throws InterruptedException, IOException {
+    private static synchronized void shutdown() {
         final long endTime = System.currentTimeMillis();
         if (fjexecutor == null) {
             return;
         }
         fjexecutor.shutdown();
-        fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
+        try {
+            fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
         fjexecutor = null;
         if (produceStats != null) {
             produceStats.shutdown(endTime);
         }
-
         if (consumeStats != null) {
             consumeStats.shutdown(endTime);
         }
