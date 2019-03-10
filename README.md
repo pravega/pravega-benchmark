@@ -152,7 +152,7 @@ in case you want to write/read the certain number of events use the --events opt
 --events 1000000 indicates that total 1000000 (1 million) of events will be written at the throughput speed of 10MB/sec
 ```
 
-### 3 - OPS Mode or  Events Rate / Rate limiter Mode
+### 3 - OPS Mode or  Events Rate / Rate Limiter Mode
 This mode is another form of controlling writers throughput by limiting the number of events per second.
 In this mode, the pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum events per sec.
 This mode is used to find the least latency  that can be obtained from the pravega cluster for events rate.
