@@ -100,11 +100,12 @@ The pravega benchmark tool can be executed to
  - write/read the events/records for the specified amount of time
 
 The pravega benchmark tool can be executed in the following modes:
+```
 1. Burst Mode
 2. Throughput Mode
 3. OPS Mode or  Events Rate / Rate limiter Mode
 4. End to End Latency Mode
-
+```
 
 ### 1 - Burst Mode
 In this mode, the pravega benchmark tool pushes/pulls the messages to/from the pravega client as much as possible.
