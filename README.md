@@ -10,8 +10,8 @@ You may obtain a copy of the License at
 
 # Pravega Benchmark Tool
 
-The pravega benchmark tool used for the performance benchmarking of pravega stream storage.
-This tool performs the throughput and latency analysis for the multi producers and consumers for pravega.
+The pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
+This tool performs the throughput and latency analysis for the multi producers and consumers of pravega.
 it also validates the end to end latency. The write and/or read latencies can be stored in the CSV file for later analysis.
 At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th and 99.9th latency percentiles.
 
