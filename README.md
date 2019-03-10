@@ -106,7 +106,7 @@ The pravega benchmark tool can be executed in the following modes:
 4. End to End Latency Mode
 
 
-1 - Burst Mode
+### 1 - Burst Mode
 In this mode, the pravega benchmark tool pushes/pulls the messages to/from the pravega client as much as possible.
 This mode is used to find the maximum and throughput that can be obtained from the pravega cluster.
 
@@ -127,7 +127,7 @@ in case you want to write/read the certain number of events use the --events opt
 --events <number> indicates that total <number> of events to write/read
 ```
 
-2 - Throughput Mode
+### 2 - Throughput Mode
 In this mode, the pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum throughput.
 This mode is used to find the least latency  that can be obtained from the pravega cluster for given throughput.
 This mode is used only for write operation.
@@ -152,7 +152,7 @@ in case you want to write/read the certain number of events use the --events opt
 --events 1000000 indicates that total 1000000 (1 million) of events will be written at the throughput speed of 10MB/sec
 ```
 
-3 - OPS Mode or  Events Rate / Rate limiter Mode
+### 3 - OPS Mode or  Events Rate / Rate limiter Mode
 This mode is another form of controlling writers throughput by limiting the number of events per second.
 In this mode, the pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum events per sec.
 This mode is used to find the least latency  that can be obtained from the pravega cluster for events rate.
@@ -170,7 +170,7 @@ This test will executed for 300 seconds (5 minutes) because option -time 60 is u
 Note that in this mode, there is 'NO total number of events' to specify hence user must supply the time to run using -time option.
 ```
 
-4 - End to End Latency Mode
+### 4 - End to End Latency Mode
 In this mode, the pravega benchmark tool writes and read the messages to the pravega cluster and records the end to end latency.
 End to end latency means the time duration between the beginning of the writing event/record to stream and the time after reading the event/record.
 in this mode user must specify both the number of producers and consumers.
@@ -186,7 +186,7 @@ The -throughput -1 specifies the writes tries to write the events at the maximum
 Note that, in this mode user must specify count of both producers and consumers.
 ```
 
-##Recording the latencies to CSV files
+### Recording the latencies to CSV files
 user can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
 in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
 
