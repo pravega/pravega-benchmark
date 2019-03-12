@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.emc.pravega.perf;
+package io.pravega.perf;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;

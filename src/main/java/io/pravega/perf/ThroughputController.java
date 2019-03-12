@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.emc.pravega.perf;
+package io.pravega.perf;
 
 import java.time.Duration;
 import java.time.Instant;

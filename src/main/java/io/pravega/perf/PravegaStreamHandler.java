@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.emc.pravega.perf;
+package io.pravega.perf;
 
 import java.net.URI;
 import java.util.List;
