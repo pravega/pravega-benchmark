@@ -30,7 +30,7 @@ import java.util.concurrent.ExecutionException;
  * abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
-    final private performance perf;
+    final private Performance perf;
     final private ThroughputController tput;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
@@ -41,7 +41,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 isRandomKey, messageSize, start,
                 stats, streamName, 0);
         this.tput = tput;
-        perf = secondsToRun > 0 ? new throughputWriter() : new eventsWriter();
+        perf = secondsToRun > 0 ? new ThroughputWriter() : new EventsWriter();
     }
 
     /**
@@ -63,7 +63,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         return null;
     }
 
-    private class eventsWriter implements performance {
+    private class EventsWriter implements Performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
             CompletableFuture retFuture = null;
@@ -97,7 +97,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         }
     }
 
-    private class throughputWriter implements performance {
+    private class ThroughputWriter implements Performance {
 
         public void benchmark() throws InterruptedException, ExecutionException, IOException {
             CompletableFuture retFuture = null;

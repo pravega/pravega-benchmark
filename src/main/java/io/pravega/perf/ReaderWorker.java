@@ -28,14 +28,14 @@ import java.util.concurrent.ExecutionException;
  * abstract class for Readers.
  */
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
-    final private performance perf;
+    final private Performance perf;
 
     ReaderWorker(int readerId, int events, int secondsToRun, Instant start,
                  PerfStats stats, String readergrp, int timeout) {
         super(readerId, events, secondsToRun,
                 false, 0, start,
                 stats, readergrp, timeout);
-        perf = secondsToRun > 0 ? new eventstimeReader() : new eventsReader();
+        perf = secondsToRun > 0 ? new EventstimeReader() : new EventsReader();
     }
 
     /**
@@ -54,7 +54,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         return null;
     }
 
-    private class eventsReader implements performance {
+    private class EventsReader implements Performance {
 
         public void benchmark() throws IOException {
             String ret = null;
@@ -73,7 +73,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         }
     }
 
-    private class eventstimeReader implements performance {
+    private class EventstimeReader implements Performance {
         public void benchmark() throws IOException {
             String ret = null;
             try {
