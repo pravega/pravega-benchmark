@@ -11,8 +11,6 @@
 package io.pravega.perf;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -20,14 +18,17 @@ import java.util.concurrent.ExecutionException;
  * abstract class for Readers.
  */
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
+    final private static int MS_PER_SEC = 1000;
     final private Performance perf;
 
-    ReaderWorker(int readerId, int events, int secondsToRun, Instant start,
-                 PerfStats stats, String readergrp, int timeout) {
+    ReaderWorker(int readerId, int events, int secondsToRun, long start,
+                 PerfStats stats, String readergrp, int timeout, boolean wNr) {
         super(readerId, events, secondsToRun,
-                false, 0, start,
-                stats, readergrp, timeout);
-        perf = secondsToRun > 0 ? new EventstimeReader() : new EventsReader();
+                0, start, stats, readergrp, timeout);
+
+        perf = secondsToRun > 0 ? (wNr ? new EventsTimeReaderRW() : new EventsTimeReader()) :
+                (wNr ? new EventsReaderRW() : new EventsReader());
+
     }
 
     /**
@@ -52,12 +53,11 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             String ret = null;
             try {
                 for (int i = 0; i < events; i++) {
-                    final Instant startTime = Instant.now();
+                    final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(null, startTime, ret.length());
+                        stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
                     }
-                    stats.print();
                 }
             } finally {
                 close();
@@ -65,18 +65,59 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         }
     }
 
-    private class EventstimeReader implements Performance {
+    private class EventsReaderRW implements Performance {
         public void benchmark() throws IOException {
             String ret = null;
             try {
-
-                for (int i = 0; Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun; i++) {
-                    final Instant startTime = Instant.now();
+                for (int i = 0; i < events; i++) {
                     ret = readData();
                     if (ret != null) {
-                        stats.recordTime(null, startTime, ret.length());
+                        final long endTime = System.currentTimeMillis();
+                        final long startTime = Long.parseLong(ret.split(",")[0]);
+                        stats.recordTime(startTime, endTime, ret.length());
                     }
-                    stats.print();
+                }
+            } finally {
+                close();
+            }
+        }
+    }
+
+
+    private class EventsTimeReader implements Performance {
+        public void benchmark() throws IOException {
+            final long msToRun = secondsToRun * MS_PER_SEC;
+            String ret = null;
+            long time = System.currentTimeMillis();
+
+            try {
+
+                while ((time - StartTime)  < msToRun) {
+                    time = System.currentTimeMillis();
+                    ret = readData();
+                    if (ret != null) {
+                        stats.recordTime(time, System.currentTimeMillis(), ret.length());
+                    }
+                }
+            } finally {
+                close();
+            }
+        }
+    }
+
+    private class EventsTimeReaderRW implements Performance {
+        public void benchmark() throws IOException {
+            final long msToRun = secondsToRun * MS_PER_SEC;
+            String ret = null;
+            long time = System.currentTimeMillis();
+            try {
+                while ((time - StartTime) < msToRun) {
+                    ret = readData();
+                    if (ret != null) {
+                        time = System.currentTimeMillis();
+                        final long startTime = Long.parseLong(ret.split(",")[0]);
+                        stats.recordTime(startTime, time, ret.length());
+                    }
                 }
             } finally {
                 close();

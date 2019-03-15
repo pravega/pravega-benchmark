@@ -10,9 +10,6 @@
 
 package io.pravega.perf;
 
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-
-public interface Performance {
-    void benchmark() throws InterruptedException, IOException;
+public interface TriConsumer {
+    void accept(long a, long b, int c);
 }
