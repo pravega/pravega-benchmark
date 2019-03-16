@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -52,14 +52,13 @@ public class PravegaPerfTest {
     private static int segmentCount = 0;
     private static int events = 0;
     private static int eventsPerSec = 0;
-    private static int eventsPerWorker = 0;
+    private static int eventsPerProducer = 0;
+    private static int eventsPerConsumer = 0;
     private static int transactionPerCommit = 0;
     private static int runtimeSec = 0;
     private static final int reportingInterval = 5000;
     private static ScheduledExecutorService bgexecutor;
     private static ForkJoinPool fjexecutor;
-    private static PerfStats produceStats = null;
-    private static PerfStats consumeStats = null;
     private static double throughput = 0;
     private static String writeFile = null;
     private static String readFile = null;
@@ -67,11 +66,12 @@ public class PravegaPerfTest {
     private static final int timeout = 10;
     private static ClientFactory factory = null;
     private static ControllerImpl controller = null;
-    private static List<Callable<Void>> readers = null;
-    private static List<Callable<Void>> writers = null;
     private static long startTime;
 
     public static void main(String[] args) {
+        final PerfStats produceStats;
+        final PerfStats consumeStats;
+
         startTime = System.currentTimeMillis();
 
         try {
@@ -104,16 +104,41 @@ public class PravegaPerfTest {
 
 
         try {
-            setupPravega();
-            final List<Callable<Void>> workers = Stream.of(readers, writers)
-                    .filter(x -> x != null)
-                    .flatMap(x -> x.stream())
-                    .collect(Collectors.toList());
+            if (producerCount > 0) {
+                if (writeNread) {
+                    produceStats = null;
+                } else {
+                    produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
+                }
+                eventsPerProducer = (events + producerCount - 1) / producerCount;
+                if (throughput == 0 && runtimeSec > 0) {
+                    eventsPerSec = events / producerCount;
+                } else if (throughput > 0) {
+                    eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
+                }
+            } else {
+                produceStats = null;
+            }
+
+            if (consumerCount > 0) {
+                String action;
+                if (writeNread) {
+                    action = "Write/Reading";
+                } else {
+                    action = "Reading";
+                }
+                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
+                eventsPerConsumer = events / consumerCount;
+            } else {
+                consumeStats = null;
+            }
+
+            final List<Callable<Void>> workers = setupPravega(produceStats, consumeStats);
 
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 public void run() {
                     System.out.println();
-                    shutdown();
+                    shutdown(produceStats, consumeStats);
                 }
             });
 
@@ -125,15 +150,18 @@ public class PravegaPerfTest {
                 produceStats.start(beginTime);
             }
             fjexecutor.invokeAll(workers);
+            shutdown(produceStats, consumeStats);
         } catch (Exception e) {
             e.printStackTrace();
         }
-        shutdown();
         System.exit(0);
     }
 
-    private static void setupPravega() throws
+    private static List<Callable<Void>> setupPravega(PerfStats pStats, PerfStats cStats) throws
             URISyntaxException, InterruptedException, ReinitializationRequiredException, ExecutionException, TimeoutException, Exception {
+        final List<Callable<Void>> readers;
+        final List<Callable<Void>> writers;
+
         controller = new ControllerImpl(ControllerImplConfig.builder()
                 .clientConfig(ClientConfig.builder()
                         .controllerURI(new URI(controllerUri)).build())
@@ -155,66 +183,53 @@ public class PravegaPerfTest {
         factory = new ClientFactoryImpl(scopeName, controller);
 
         if (producerCount > 0) {
-            if (writeNread) {
-                produceStats = null;
-            } else {
-                produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile);
-            }
-            eventsPerWorker = (events + producerCount - 1) / producerCount;
-            if (throughput == 0 && runtimeSec > 0) {
-                eventsPerSec = events / producerCount;
-            } else if (throughput > 0) {
-                eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
-            }
 
             if (transactionPerCommit > 0) {
                 writers = IntStream.range(0, producerCount)
                         .boxed()
-                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerWorker,
+                        .map(i -> new PravegaTransactionWriterWorker(i, eventsPerProducer,
                                 runtimeSec, false,
                                 messageSize, startTime,
-                                produceStats, streamName,
+                                pStats, streamName,
                                 eventsPerSec, writeNread, factory,
                                 transactionPerCommit))
                         .collect(Collectors.toList());
             } else {
                 writers = IntStream.range(0, producerCount)
                         .boxed()
-                        .map(i -> new PravegaWriterWorker(i, eventsPerWorker,
+                        .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
                                 runtimeSec, false,
                                 messageSize, startTime,
-                                produceStats, streamName,
+                                pStats, streamName,
                                 eventsPerSec, writeNread, factory))
                         .collect(Collectors.toList());
             }
         } else {
             writers = null;
-            produceStats = null;
         }
 
         if (consumerCount > 0) {
             readerGroup = streamHandle.createReaderGroup();
-            String action;
-            if (writeNread) {
-                action = "Write/Reading";
-            } else {
-                action = "Reading";
-            }
-            consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile);
-            eventsPerWorker = events / consumerCount;
             readers = IntStream.range(0, consumerCount)
                     .boxed()
-                    .map(i -> new PravegaReaderWorker(i, eventsPerWorker,
-                            runtimeSec, startTime, consumeStats,
+                    .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
+                            runtimeSec, startTime, cStats,
                             streamName, timeout, writeNread, factory))
                     .collect(Collectors.toList());
         } else {
             readers = null;
-            consumeStats = null;
         }
+
+        final List<Callable<Void>> workers = Stream.of(readers, writers)
+                .filter(x -> x != null)
+                .flatMap(x -> x.stream())
+                .collect(Collectors.toList());
+
+        return workers;
+
     }
 
-    private static synchronized void shutdown() {
+    private static synchronized void shutdown(PerfStats pStats, PerfStats cStats) {
         final long endTime = System.currentTimeMillis();
         if (fjexecutor == null) {
             return;
@@ -222,15 +237,16 @@ public class PravegaPerfTest {
         fjexecutor.shutdown();
         try {
             fjexecutor.awaitTermination(1, TimeUnit.SECONDS);
+            if (pStats != null) {
+                pStats.shutdown(endTime);
+            }
+            if (cStats != null) {
+                cStats.shutdown(endTime);
+            }
         } catch (InterruptedException ex) {
             ex.printStackTrace();
-        }
-        fjexecutor = null;
-        if (produceStats != null) {
-            produceStats.shutdown(endTime);
-        }
-        if (consumeStats != null) {
-            consumeStats.shutdown(endTime);
+        } finally {
+            fjexecutor = null;
         }
     }
 

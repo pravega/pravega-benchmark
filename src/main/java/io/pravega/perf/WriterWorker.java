@@ -10,6 +10,7 @@
 
 package io.pravega.perf;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -128,6 +129,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         }
     }
 
+    @NotThreadSafe
     private class EventsController {
         private static final long NS_PER_MS = 1000000L;
         private static final long NS_PER_SEC = 1000 * NS_PER_MS;
