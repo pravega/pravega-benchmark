@@ -5,14 +5,15 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 package io.pravega.perf;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
@@ -47,13 +48,13 @@ public class PerfStats {
         final private long endTime;
         final private int bytes;
 
-        TimeStamp(long startTime, long endTime, int bytes) {
+        private TimeStamp(long startTime, long endTime, int bytes) {
             this.startTime = startTime;
             this.endTime = endTime;
             this.bytes = bytes;
         }
 
-        TimeStamp(long endTime) {
+        private TimeStamp(long endTime) {
             this.endTime = endTime;
             this.bytes = -1;
             this.startTime = -1;
@@ -82,15 +83,36 @@ public class PerfStats {
     final private class QueueProcessor implements Runnable {
         final private LatencyWriter latencyRecorder;
         final private TimeWindow window;
-        final private CountDownLatch latch;
+        final private CompletableFuture<Void> end;
 
-        public QueueProcessor(String action, int massageSize, long startTime, String csvFile) throws IOException {
+        private QueueProcessor(String action, int massageSize, long startTime, String csvFile) throws IOException {
             this.latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
             this.window = new TimeWindow(startTime);
-            this.latch = new CountDownLatch(1);
+            this.end = new CompletableFuture<>();
         }
 
+        private void shutdown(long endTime) throws ExecutionException, InterruptedException {
+            queue.add(new TimeStamp(endTime));
+            this.end.get();
+        }
+
+        private void record(long startTime, long endTime, int bytes) {
+            final int latency = (int) (endTime - startTime);
+            window.record(bytes, latency);
+            latencyRecorder.record(startTime, bytes, latency);
+        }
+
+        /**
+         * print the performance statistics of current time window.
+         */
+        private void print() throws IOException {
+            final long time = System.currentTimeMillis();
+            if (window.windowTimeMS(time) >= windowInterval) {
+                window.print(time);
+                window.reset(time);
+            }
+        }
 
         public void run() {
             TimeStamp t;
@@ -111,31 +133,9 @@ public class PerfStats {
                 }
             }
             latencyRecorder.printTotal(t.endTime);
-            latch.countDown();
+            end.complete(null);
         }
 
-
-        private void shutdown(long endTime) throws InterruptedException {
-            queue.add(new TimeStamp(endTime));
-            this.latch.await();
-        }
-
-        private void record(long startTime, long endTime, int bytes) {
-            final int latency = (int) (endTime - startTime);
-            window.record(bytes, latency);
-            latencyRecorder.record(startTime, bytes, latency);
-        }
-
-        /**
-         * print the performance statistics of current time window.
-         */
-        private void print() throws IOException {
-            final long time = System.currentTimeMillis();
-            if (window.windowTimeMS(time) >= windowInterval) {
-                window.print(time);
-                window.reset(time);
-            }
-        }
 
         /**
          * private class for Performance statistics within a given time window.
@@ -149,11 +149,11 @@ public class PerfStats {
             private int maxLatency;
             private long totalLatency;
 
-            public TimeWindow(long start) {
+            private TimeWindow(long start) {
                 reset(start);
             }
 
-            public void reset(long start) {
+            private void reset(long start) {
                 this.startTime = start;
                 this.lastTime = this.startTime;
                 this.count = 0;
@@ -206,10 +206,10 @@ public class PerfStats {
         }
 
         private class LatencyWriter {
-            final private static int MS_PER_SEC = 1000;
-            final private static int MS_PER_MIN = MS_PER_SEC * 60;
-            final private static int MS_PER_HR = MS_PER_MIN * 60;
-            final private double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
+            private final static int MS_PER_SEC = 1000;
+            private final static int MS_PER_MIN = MS_PER_SEC * 60;
+            private final static int MS_PER_HR = MS_PER_MIN * 60;
+            private final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
 
             final String action;
             final long start;
@@ -223,18 +223,18 @@ public class PerfStats {
 
 
             private class LatencyRange {
-                int latency;
-                int start;
-                int end;
+                private final int latency;
+                private final int start;
+                private final int end;
 
-                public LatencyRange(int latency, int start, int end) {
+                private LatencyRange(int latency, int start, int end) {
                     this.latency = latency;
                     this.start = start;
                     this.end = end;
                 }
             }
 
-            public LatencyWriter(String action, int messageSize, long start) {
+            LatencyWriter(String action, int messageSize, long start) {
                 this.action = action;
                 this.messageSize = messageSize;
                 this.start = start;
@@ -307,7 +307,7 @@ public class PerfStats {
             final private String csvFile;
             final private CSVPrinter csvPrinter;
 
-            public CSVLatencyWriter(String action, int messageSize, long start, String csvFile) throws IOException {
+            CSVLatencyWriter(String action, int messageSize, long start, String csvFile) throws IOException {
                 super(action, messageSize, start);
                 this.csvFile = csvFile;
                 csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
@@ -369,7 +369,7 @@ public class PerfStats {
      *
      * @param endTime End time
      */
-    public synchronized void shutdown(long endTime) throws InterruptedException {
+    public synchronized void shutdown(long endTime) throws ExecutionException, InterruptedException {
         if (this.recorder != null) {
             recorder.shutdown(endTime);
             queue.clear();

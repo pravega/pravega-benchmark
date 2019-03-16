@@ -142,7 +142,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         /**
          * @param eventsPerSec events per second
          */
-        public EventsController(long start, int eventsPerSec) {
+        private EventsController(long start, int eventsPerSec) {
             this.startTime = start;
             this.eventsPerSec = eventsPerSec;
             this.sleepTimeNs = this.eventsPerSec > 0 ?
@@ -154,7 +154,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
          *
          * @param events current events
          */
-        public void control(long events) {
+        private void control(long events) {
             if (this.eventsPerSec <= 0) {
                 return;
             }

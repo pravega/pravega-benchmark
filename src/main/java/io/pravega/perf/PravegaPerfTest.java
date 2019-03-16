@@ -243,7 +243,7 @@ public class PravegaPerfTest {
             if (cStats != null) {
                 cStats.shutdown(endTime);
             }
-        } catch (InterruptedException ex) {
+        } catch (InterruptedException | ExecutionException ex) {
             ex.printStackTrace();
         } finally {
             fjexecutor = null;
