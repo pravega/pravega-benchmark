@@ -296,7 +296,7 @@ public class PerfStats {
 
                 System.out.printf(
                         "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency" +
-                                ",%d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th\n",
+                                ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th\n",
                         count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
                         percs[0], percs[1], percs[2], percs[3], percs[4]);
             }
