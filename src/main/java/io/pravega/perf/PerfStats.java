@@ -70,7 +70,7 @@ public class PerfStats {
      */
     @NotThreadSafe
     final static private class QueueProcessor implements Runnable {
-        final String action;
+        final private String action;
         final private LatencyWriter latencyRecorder;
         final private long windowInterval;
         final private ConcurrentLinkedQueue<TimeStamp> queue;
