@@ -37,7 +37,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         perf = secondsToRun > 0 ? (wNr ? new EventsWriterTimeRW() : new EventsWriterTime()) :
                 (wNr ? new EventsWriterRW() : new EventsWriter());
 
-        Random random = new Random(0);
+        Random random = new Random();
         byte[] bytes = new byte[messageSize];
         for (int i = 0; i < messageSize; ++i) {
             bytes[i] = (byte) (random.nextInt(26) + 65);
