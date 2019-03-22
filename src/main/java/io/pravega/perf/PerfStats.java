@@ -34,7 +34,7 @@ public class PerfStats {
     final private String action;
     final private String csvFile;
     final private int messageSize;
-    final private long windowInterval;
+    final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
     final private ForkJoinPool executor;
     private QueueProcessor recorder;
@@ -42,8 +42,7 @@ public class PerfStats {
     /**
      * private class for start and end time.
      */
-    @NotThreadSafe
-    final private class TimeStamp {
+    final static private class TimeStamp {
         final private long startTime;
         final private long endTime;
         final private int bytes;
@@ -52,16 +51,6 @@ public class PerfStats {
             this.startTime = startTime;
             this.endTime = endTime;
             this.bytes = bytes;
-        }
-
-        private TimeStamp(long endTime) {
-            this.endTime = endTime;
-            this.bytes = -1;
-            this.startTime = -1;
-        }
-
-        private boolean isEnd() {
-            return this.bytes == -1;
         }
     }
 
@@ -80,60 +69,50 @@ public class PerfStats {
      * private class for start and end time.
      */
     @NotThreadSafe
-    final private class QueueProcessor implements Runnable {
+    final static private class QueueProcessor implements Runnable {
+        final String action;
         final private LatencyWriter latencyRecorder;
-        final private TimeWindow window;
-        final private CompletableFuture<Void> end;
+        final private long windowInterval;
+        final private ConcurrentLinkedQueue<TimeStamp> queue;
 
-        private QueueProcessor(String action, int massageSize, long startTime, String csvFile) throws IOException {
+
+        private QueueProcessor(String action, int reportingInterval, int messageSize,
+                               long startTime, String csvFile, ConcurrentLinkedQueue<TimeStamp> queue) throws IOException {
+            this.action = action;
+            this.windowInterval = reportingInterval;
+            this.queue = queue;
             this.latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            this.window = new TimeWindow(startTime);
-            this.end = new CompletableFuture<>();
         }
 
-        private void shutdown(long endTime) throws ExecutionException, InterruptedException {
-            queue.add(new TimeStamp(endTime));
-            this.end.get();
-        }
-
-        private void record(long startTime, long endTime, int bytes) {
-            final int latency = (int) (endTime - startTime);
-            window.record(bytes, latency);
-            latencyRecorder.record(startTime, bytes, latency);
-        }
 
         /**
-         * print the performance statistics of current time window.
+         * print the total performance statistics.
          */
-        private void print() throws IOException {
-            final long time = System.currentTimeMillis();
-            if (window.windowTimeMS(time) >= windowInterval) {
-                window.print(time);
-                window.reset(time);
-            }
+        private void printTotal(long endTime) {
+            latencyRecorder.printTotal(endTime);
         }
 
         public void run() {
+            long time = System.currentTimeMillis();
+            final TimeWindow window = new TimeWindow(action, time);
             TimeStamp t;
+
             while (true) {
-                try {
-                    t = queue.poll();
-                    if (t != null) {
-                        if (t.isEnd()) {
-                            break;
-                        }
-                        record(t.startTime, t.endTime, t.bytes);
-                    } else {
-                        LockSupport.parkNanos(100);
-                    }
-                    print();
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
+                t = queue.poll();
+                if (t != null) {
+                    final int latency = (int) (t.endTime - t.startTime);
+                    window.record(t.bytes, latency);
+                    latencyRecorder.record(t.startTime, t.bytes, latency);
+                } else {
+                    LockSupport.parkNanos(100);
+                }
+                time = System.currentTimeMillis();
+                if (window.windowTimeMS(time) > windowInterval) {
+                    window.print(time);
+                    window.reset(time);
                 }
             }
-            latencyRecorder.printTotal(t.endTime);
-            end.complete(null);
         }
 
 
@@ -141,7 +120,8 @@ public class PerfStats {
          * private class for Performance statistics within a given time window.
          */
         @NotThreadSafe
-        private class TimeWindow {
+        final static private class TimeWindow {
+            final private String action;
             private long startTime;
             private long lastTime;
             private long count;
@@ -149,7 +129,8 @@ public class PerfStats {
             private int maxLatency;
             private long totalLatency;
 
-            private TimeWindow(long start) {
+            private TimeWindow(String action, long start) {
+                this.action = action;
                 reset(start);
             }
 
@@ -194,18 +175,12 @@ public class PerfStats {
              * @param time current time.
              */
             private long windowTimeMS(long time) {
-                return time - window.startTime;
-            }
-
-            /**
-             * get the time duration of this window
-             */
-            private long windowTimeMS() {
-                return windowTimeMS(System.currentTimeMillis());
+                return time - startTime;
             }
         }
 
-        private class LatencyWriter {
+        @NotThreadSafe
+        static private class LatencyWriter {
             private final static int MS_PER_SEC = 1000;
             private final static int MS_PER_MIN = MS_PER_SEC * 60;
             private final static int MS_PER_HR = MS_PER_MIN * 60;
@@ -303,7 +278,7 @@ public class PerfStats {
         }
 
         @NotThreadSafe
-        private class CSVLatencyWriter extends LatencyWriter {
+        static private class CSVLatencyWriter extends LatencyWriter {
             final private String csvFile;
             final private CSVPrinter csvPrinter;
 
@@ -358,7 +333,7 @@ public class PerfStats {
      */
     public synchronized void start(long startTime) throws IOException {
         if (this.recorder == null) {
-            this.recorder = new QueueProcessor(action, messageSize, startTime, csvFile);
+            this.recorder = new QueueProcessor(action, windowInterval, messageSize, startTime, csvFile, queue);
             executor.execute(this.recorder);
         }
     }
@@ -371,8 +346,9 @@ public class PerfStats {
      */
     public synchronized void shutdown(long endTime) throws ExecutionException, InterruptedException {
         if (this.recorder != null) {
-            recorder.shutdown(endTime);
+            executor.shutdownNow();
             queue.clear();
+            recorder.printTotal(endTime);
             this.recorder = null;
         }
     }

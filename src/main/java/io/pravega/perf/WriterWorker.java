@@ -5,13 +5,14 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -21,10 +22,9 @@ import java.util.concurrent.ExecutionException;
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private static int MS_PER_SEC = 1000;
-
     final private Performance perf;
-    final private EventsController eCnt;
     final private String payload;
+    final private int eventsPerSec;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
@@ -33,7 +33,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         super(sensorId, events, secondsToRun,
                 messageSize, start, stats,
                 streamName, 0);
-        this.eCnt = new EventsController(start, eventsPerSec);
+        this.eventsPerSec = eventsPerSec;
         perf = secondsToRun > 0 ? (wNr ? new EventsWriterTimeRW() : new EventsWriterTime()) :
                 (wNr ? new EventsWriterRW() : new EventsWriter());
 
@@ -42,7 +42,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         for (int i = 0; i < messageSize; ++i) {
             bytes[i] = (byte) (random.nextInt(26) + 65);
         }
-        payload = new String(bytes);
+        payload = new String(bytes, StandardCharsets.US_ASCII);
     }
 
     /**
@@ -75,7 +75,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     private class EventsWriter implements Performance {
 
-        public void benchmark() throws InterruptedException,  IOException {
+        public void benchmark() throws InterruptedException, IOException {
+            final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
             for (int i = 0; i < events; i++) {
                 recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
@@ -87,6 +88,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private class EventsWriterRW implements Performance {
 
         public void benchmark() throws InterruptedException, IOException {
+            final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
             for (int i = 0; i < events; i++) {
                 final String val = System.currentTimeMillis() + ", " + workerID + ", ";
                 final String data = (val + payload).substring(0, messageSize);
@@ -100,9 +102,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     private class EventsWriterTime implements Performance {
 
-        public void benchmark() throws InterruptedException,  IOException {
+        public void benchmark() throws InterruptedException, IOException {
             final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
 
             for (int i = 0; (time - StartTime) < msToRun; i++) {
                 time = recordWrite(payload, stats::recordTime);
@@ -117,6 +120,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         public void benchmark() throws InterruptedException, IOException {
             final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
 
             for (int i = 0; (time - StartTime) < msToRun; i++) {
                 time = System.currentTimeMillis();
@@ -130,14 +134,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
     @NotThreadSafe
-    private class EventsController {
+    static private class EventsController {
         private static final long NS_PER_MS = 1000000L;
         private static final long NS_PER_SEC = 1000 * NS_PER_MS;
         private static final long MIN_SLEEP_NS = 2 * NS_PER_MS;
         private final long startTime;
         private final long sleepTimeNs;
         private final int eventsPerSec;
-        private long toSleepNs  = 0;
+        private long toSleepNs = 0;
 
         /**
          * @param eventsPerSec events per second
@@ -166,13 +170,13 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             }
 
             // control throughput / number of events by sleeping, on average,
-            toSleepNs  += sleepTimeNs;
+            toSleepNs += sleepTimeNs;
             // If threshold reached, sleep a little
-            if (toSleepNs  >= MIN_SLEEP_NS) {
+            if (toSleepNs >= MIN_SLEEP_NS) {
                 long sleepStart = System.nanoTime();
                 try {
-                    final long sleepMs = toSleepNs  / NS_PER_MS;
-                    final long sleepNs = toSleepNs  - sleepMs * NS_PER_MS;
+                    final long sleepMs = toSleepNs / NS_PER_MS;
+                    final long sleepNs = toSleepNs - sleepMs * NS_PER_MS;
                     Thread.sleep(sleepMs, (int) sleepNs);
                 } catch (InterruptedException e) {
                     // will be taken care in finally block
@@ -180,9 +184,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                     // in case of short sleeps or oversleep ;adjust it for next sleep duration
                     final long sleptNS = System.nanoTime() - sleepStart;
                     if (sleptNS > 0) {
-                        toSleepNs  -= sleptNS;
+                        toSleepNs -= sleptNS;
                     } else {
-                        toSleepNs  = 0;
+                        toSleepNs = 0;
                     }
                 }
             }
