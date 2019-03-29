@@ -45,7 +45,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         payload = new String(bytes, StandardCharsets.US_ASCII);
     }
 
-    /**
+    /**.
      * writes the data and benchmark
      *
      * @param data   data to write
@@ -54,7 +54,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      */
     public abstract long recordWrite(String data, TriConsumer record);
 
-    /**
+    /**.
      * writes the data and benchmark
      *
      * @param data data to write
@@ -107,7 +107,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             long time = System.currentTimeMillis();
             final EventsController eCnt = new EventsController(time, eventsPerSec);
 
-            for (int i = 0; (time - StartTime) < msToRun; i++) {
+            for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = recordWrite(payload, stats::recordTime);
                 eCnt.control(i);
             }
@@ -122,7 +122,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             long time = System.currentTimeMillis();
             final EventsController eCnt = new EventsController(time, eventsPerSec);
 
-            for (int i = 0; (time - StartTime) < msToRun; i++) {
+            for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = System.currentTimeMillis();
                 final String val = time + ", " + workerID + ", ";
                 final String data = (val + payload).substring(0, messageSize);

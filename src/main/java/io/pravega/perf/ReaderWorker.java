@@ -92,7 +92,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
             try {
 
-                while ((time - StartTime)  < msToRun) {
+                while ((time - startTime)  < msToRun) {
                     time = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
@@ -111,7 +111,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             String ret = null;
             long time = System.currentTimeMillis();
             try {
-                while ((time - StartTime) < msToRun) {
+                while ((time - startTime) < msToRun) {
                     ret = readData();
                     if (ret != null) {
                         time = System.currentTimeMillis();

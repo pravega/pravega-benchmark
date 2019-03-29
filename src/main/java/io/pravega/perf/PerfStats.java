@@ -22,6 +22,8 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+
+import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.NotThreadSafe;
 
 
@@ -30,11 +32,15 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 public class PerfStats {
     final private String action;
+    final private long beginTime;
+    final private int secondsToRun;
     final private String csvFile;
     final private int messageSize;
     final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
     final private ForkJoinPool executor;
+
+    @GuardedBy("this")
     private QueueProcessor recorder;
 
     /**
@@ -53,8 +59,10 @@ public class PerfStats {
     }
 
 
-    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
+    public PerfStats(String action, long startTime, int secondsToRun, int reportingInterval, int messageSize, String csvFile) {
         this.action = action;
+        this.beginTime = startTime;
+        this.secondsToRun = secondsToRun;
         this.messageSize = messageSize;
         this.windowInterval = reportingInterval;
         this.csvFile = csvFile;
@@ -66,21 +74,25 @@ public class PerfStats {
     /**
      * private class for start and end time.
      */
-    @NotThreadSafe
     final static private class QueueProcessor implements Runnable {
+        final private static int MS_PER_SEC = 1000;
         final private String action;
+        final private long beginTime;
+        final private int secondsToRun;
         final private LatencyWriter latencyRecorder;
         final private long windowInterval;
         final private ConcurrentLinkedQueue<TimeStamp> queue;
 
 
-        private QueueProcessor(String action, int reportingInterval, int messageSize,
-                               long startTime, String csvFile, ConcurrentLinkedQueue<TimeStamp> queue) throws IOException {
+        private QueueProcessor(String action, long startTime, int secondsToRun, int reportingInterval, int messageSize,
+                               long start, String csvFile, ConcurrentLinkedQueue<TimeStamp> queue) throws IOException {
             this.action = action;
+            this.beginTime = startTime;
+            this.secondsToRun = secondsToRun;
             this.windowInterval = reportingInterval;
             this.queue = queue;
             this.latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
-                    new CSVLatencyWriter(action, messageSize, startTime, csvFile);
+                    new CSVLatencyWriter(action, messageSize, start, csvFile);
         }
 
 
@@ -92,11 +104,12 @@ public class PerfStats {
         }
 
         public void run() {
+            final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
             final TimeWindow window = new TimeWindow(action, time);
             TimeStamp t;
 
-            while (true) {
+            while ((time - beginTime) < msToRun) {
                 t = queue.poll();
                 if (t != null) {
                     final int latency = (int) (t.endTime - t.startTime);
@@ -179,19 +192,19 @@ public class PerfStats {
 
         @NotThreadSafe
         static private class LatencyWriter {
-            private final static int MS_PER_SEC = 1000;
-            private final static int MS_PER_MIN = MS_PER_SEC * 60;
-            private final static int MS_PER_HR = MS_PER_MIN * 60;
-            private final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
+            final static int MS_PER_SEC = 1000;
+            final static int MS_PER_MIN = MS_PER_SEC * 60;
+            final static int MS_PER_HR = MS_PER_MIN * 60;
+            final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
 
             final String action;
             final long start;
             final int messageSize;
+            final int[] latencies;
             long count;
             long totalLatency;
             long maxLatency;
             long totalBytes;
-            int[] latencies;
             ArrayList<LatencyRange> latencyRanges;
 
 
@@ -328,10 +341,11 @@ public class PerfStats {
      * start the performance statistics.
      *
      * @param startTime start time time
+     * @throws IOException If an exception occurred.
      */
     public synchronized void start(long startTime) throws IOException {
         if (this.recorder == null) {
-            this.recorder = new QueueProcessor(action, windowInterval, messageSize, startTime, csvFile, queue);
+            this.recorder = new QueueProcessor(action, beginTime, secondsToRun, windowInterval, messageSize, startTime, csvFile, queue);
             executor.execute(this.recorder);
         }
     }
@@ -341,6 +355,8 @@ public class PerfStats {
      * end the final performance statistics.
      *
      * @param endTime End time
+     * @throws ExecutionException   If an exception occurred.
+     * @throws InterruptedException If an exception occurred.
      */
     public synchronized void shutdown(long endTime) throws ExecutionException, InterruptedException {
         if (this.recorder != null) {

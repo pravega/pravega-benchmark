@@ -14,10 +14,8 @@ import java.util.concurrent.CompletableFuture;
 
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
-import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.EventWriterConfig;
-import io.pravega.client.stream.TxnFailedException;
 
 /**
  * class for Pravega writer/producer.

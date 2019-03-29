@@ -13,9 +13,6 @@ package io.pravega.perf;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
-
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.concurrent.GuardedBy;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {

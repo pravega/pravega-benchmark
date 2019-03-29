@@ -19,7 +19,7 @@ public abstract class Worker {
     final int messageSize;
     final int timeout;
     final String streamName;
-    final long StartTime;
+    final long startTime;
     final PerfStats stats;
     final int secondsToRun;
 
@@ -29,7 +29,7 @@ public abstract class Worker {
         this.workerID = sensorId;
         this.events = events;
         this.secondsToRun = secondsToRun;
-        this.StartTime = start;
+        this.startTime = start;
         this.stats = stats;
         this.streamName = streamName;
         this.messageSize = messageSize;
