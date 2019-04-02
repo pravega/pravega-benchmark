@@ -279,7 +279,7 @@ public class PravegaPerfTest {
                 if (writeNread) {
                     produceStats = null;
                 } else {
-                    produceStats = new PerfStats("Writing", this.startTime, this.runtimeSec, REPORTINGINTERVAL, messageSize, writeFile);
+                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
                 }
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
                 if (throughput == 0 && runtimeSec > 0) {
@@ -303,7 +303,7 @@ public class PravegaPerfTest {
                 } else {
                     action = "Reading";
                 }
-                consumeStats = new PerfStats(action, this.startTime, this.runtimeSec, REPORTINGINTERVAL, messageSize, readFile);
+                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile);
                 eventsPerConsumer = events / consumerCount;
             } else {
                 consumeStats = null;
