@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -28,7 +28,6 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.ParseException;
 
-
 import java.net.URI;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -40,7 +39,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
-
 
 /**
  * Performance benchmark for Pravega.
@@ -155,7 +153,6 @@ public class PravegaPerfTest {
         return null;
     }
 
-
     static private abstract class Test {
         static final int MAXTIME = 60 * 60 * 24;
         static final int REPORTINGINTERVAL = 5000;
@@ -212,6 +209,8 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("time")) {
                 runtimeSec = Integer.parseInt(commandline.getOptionValue("time"));
+            } else if (events > 0) {
+                runtimeSec = 0;
             } else {
                 runtimeSec = MAXTIME;
             }
@@ -248,11 +247,10 @@ public class PravegaPerfTest {
 
             if (commandline.hasOption("throughput")) {
                 throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
-            } else if (events > 0) {
-                throughput = 0;
             } else {
                 throughput = -1;
             }
+
             if (commandline.hasOption("writecsv")) {
                 writeFile = commandline.getOptionValue("writecsv");
             } else {
@@ -282,7 +280,7 @@ public class PravegaPerfTest {
                     produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
                 }
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
-                if (throughput == 0 && runtimeSec > 0) {
+                if (throughput < 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
                 } else if (throughput > 0) {
                     eventsPerSec = (int) (((throughput * 1024 * 1024) / messageSize) / producerCount);
@@ -311,7 +309,6 @@ public class PravegaPerfTest {
             }
 
         }
-
 
         private void start(long startTime) throws IOException {
             if (produceStats != null) {
@@ -369,7 +366,6 @@ public class PravegaPerfTest {
 
             factory = new ClientFactoryImpl(scopeName, controller);
         }
-
 
         public List<Callable<Void>> getProducers() {
             final List<Callable<Void>> writers;

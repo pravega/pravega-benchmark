@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -17,15 +17,15 @@ import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
 /**
- * class for Pravega reader/consumer.
+ * Class for Pravega reader/consumer.
  */
 public class PravegaReaderWorker extends ReaderWorker {
     private final EventStreamReader<String> reader;
 
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
                         long start, PerfStats stats, String readergrp,
-                        int timeout, boolean wNr, ClientFactory factory) {
-        super(readerId, events, secondsToRun, start, stats, readergrp, timeout, wNr);
+                        int timeout, boolean writeNread, ClientFactory factory) {
+        super(readerId, events, secondsToRun, start, stats, readergrp, timeout, writeNread);
 
         final String readerSt = Integer.toString(readerId);
         reader = factory.createReader(

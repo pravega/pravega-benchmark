@@ -18,7 +18,7 @@ import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.EventWriterConfig;
 
 /**
- * class for Pravega writer/producer.
+ * Class for Pravega writer/producer.
  */
 public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<String> producer;
@@ -26,17 +26,16 @@ public class PravegaWriterWorker extends WriterWorker {
     PravegaWriterWorker(int sensorId, int events, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
-                        boolean wNr, ClientFactory factory) {
+                        boolean writeNread, ClientFactory factory) {
 
         super(sensorId, events, secondsToRun,
                 isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, wNr);
+                stats, streamName, eventsPerSec, writeNread);
 
         this.producer = factory.createEventWriter(streamName,
                 new UTF8StringSerializer(),
                 EventWriterConfig.builder().build());
     }
-
 
     @Override
     public long recordWrite(String data, TriConsumer record) {

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -18,7 +18,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
 /**
- * abstract class for Writers.
+ * Abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private static int MS_PER_SEC = 1000;
@@ -28,14 +28,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, int eventsPerSec, boolean wNr) {
+                 PerfStats stats, String streamName, int eventsPerSec, boolean writeNread) {
 
         super(sensorId, events, secondsToRun,
                 messageSize, start, stats,
                 streamName, 0);
         this.eventsPerSec = eventsPerSec;
-        perf = secondsToRun > 0 ? (wNr ? new EventsWriterTimeRW() : new EventsWriterTime()) :
-                (wNr ? new EventsWriterRW() : new EventsWriter());
+        perf = secondsToRun > 0 ? (writeNread ? new EventsWriterTimeRW() : new EventsWriterTime()) :
+                (writeNread ? new EventsWriterRW() : new EventsWriter());
 
         Random random = new Random();
         byte[] bytes = new byte[messageSize];
@@ -46,7 +46,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
     /**.
-     * writes the data and benchmark
+     * Writes the data and benchmark
      *
      * @param data   data to write
      * @param record to call for benchmarking
@@ -55,15 +55,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract long recordWrite(String data, TriConsumer record);
 
     /**.
-     * writes the data and benchmark
+     * Writes the data and benchmark
      *
      * @param data data to write
      */
     public abstract void writeData(String data);
 
-
     /**
-     * flush the producer data.
+     * Flush the producer data.
      */
     public abstract void flush();
 
@@ -98,7 +97,6 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             flush();
         }
     }
-
 
     private class EventsWriterTime implements Performance {
 
@@ -154,7 +152,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         }
 
         /**
-         * blocks for small amounts of time to achieve targetThroughput/events per sec
+         * Blocks for small amounts of time to achieve targetThroughput/events per sec
          *
          * @param events current events
          */

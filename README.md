@@ -10,16 +10,16 @@ You may obtain a copy of the License at
 
 # Pravega Benchmark Tool
 
-The pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
-This tool performs the throughput and latency analysis for the multi producers and consumers of pravega.
-it also validates the end to end latency. The write and/or read latencies can be stored in the CSV file for later analysis.
+The Pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
+This tool performs the throughput and latency analysis for the multi producers/writers and consumers/readers of pravega.
+it also validates the end to end latency. The write and/or read latencies can be stored in a CSV file for later analysis.
 At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th and 99.9th latency percentiles.
 
 
 ### Prerequisites
 
-- Pravega client : https://github.com/pravega/pravega
 - Java 8+
+- Gradle 4+
 
 ### Building
 
@@ -30,19 +30,19 @@ git clone https://github.com/pravega/pravega-benchmark
 cd pravega-benchmark
 ```
 
-Build the pravega benchmark Tool:
+Build the Pravega benchmark Tool:
 
 ```
 ./gradlew build
 ```
 
-untar the pravega benchmark tool to local folder
+untar the Pravega benchmark tool to local folder
 
 ```
 tar -xvf ./build/distributions/pravega-benchmark.tar -C ./run
 ```
 
-Running pravega bencmark tool locally:
+Running Pravega bencmark tool locally:
 
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
@@ -74,11 +74,11 @@ usage: pravega-benchmark
 
 ## Running Performance benchmarking
 
-The pravega benchmark tool can be executed to
- - write/read specific amount of events/records to/from the pravega cluster
+The Pravega benchmark tool can be executed to
+ - write/read specific amount of events/records to/from the Pravega cluster
  - write/read the events/records for the specified amount of time
 
-The pravega benchmark tool can be executed in the following modes:
+The Pravega benchmark tool can be executed in the following modes:
 ```
 1. Burst Mode
 2. Throughput Mode
@@ -87,7 +87,7 @@ The pravega benchmark tool can be executed in the following modes:
 ```
 
 ### 1 - Burst Mode
-In this mode, the pravega benchmark tool pushes/pulls the messages to/from the pravega client as much as possible.
+In this mode, the Pravega benchmark tool pushes/pulls the messages to/from the pravega client as much as possible.
 This mode is used to find the maximum and throughput that can be obtained from the pravega cluster.
 This mode can be used for both producers and consumers.
 
@@ -101,7 +101,7 @@ This test tries to write and read events of size 100 bytes to/from the stream 's
 The option '-controller tcp://127.0.0.1:9090' specifies the pravega controller IP address and port number.
 Note that -producers 1 indicates 1 producer/writers.
 
-in case you want to write/read the certain number of events use the -events option without -time option as follows
+in the case you want to write/read the certain number of events use the -events option without -time option as follows
 
 <pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -events 1000000
 
@@ -109,8 +109,8 @@ in case you want to write/read the certain number of events use the -events opti
 ```
 
 ### 2 - Throughput Mode
-In this mode, the pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum throughput.
-This mode is used to find the least latency  that can be obtained from the pravega cluster for given throughput.
+In this mode, the Pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum throughput in terms of Mega Bytes/second (MB/s).
+This mode is used to find the least latency that can be obtained from the pravega cluster for given throughput.
 This mode is used only for write operation.
 
 ```
@@ -126,7 +126,7 @@ If the stream 'streamname5' is not existing , then it will be created with the 5
 if the steam is already existing then it will be scaled up/down to 5 segments.
 Note that -producers 5 indicates 5 producers/writers .
 
-in case you want to write/read the certain number of events use the -events option without -time option as follows
+in the case you want to write/read the certain number of events use the -events option without -time option as follows
 
 <pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 1  -size 100   -throughput 10   -events 1000000
 
@@ -135,7 +135,7 @@ in case you want to write/read the certain number of events use the -events opti
 
 ### 3 - OPS Mode or  Events Rate / Rate Limiter Mode
 This mode is another form of controlling writers throughput by limiting the number of events per second.
-In this mode, the pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum events per sec.
+In this mode, the Pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum events per sec.
 This mode is used to find the least latency  that can be obtained from the pravega cluster for events rate.
 This mode is used only for write operation.
 
@@ -152,7 +152,7 @@ Note that in this mode, there is 'NO total number of events' to specify hence us
 ```
 
 ### 4 - End to End Latency Mode
-In this mode, the pravega benchmark tool writes and read the messages to the pravega cluster and records the end to end latency.
+In this mode, the Pravega benchmark tool writes and read the messages to the pravega cluster and records the end to end latency.
 End to end latency means the time duration between the beginning of the writing event/record to stream and the time after reading the event/record.
 in this mode user must specify both the number of producers and consumers.
 The -throughput option (Throughput mode) or -events (late limiter) can used to limit the writers throughput or events rate.

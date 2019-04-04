@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  */
 package io.pravega.perf;
 
@@ -19,18 +19,16 @@ import java.util.concurrent.Future;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
-
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.NotThreadSafe;
 
 
 /**
- * class for Performance statistics.
+ * Class for Performance statistics.
  */
 public class PerfStats {
     final private String action;
@@ -44,7 +42,7 @@ public class PerfStats {
     private Future<Void> ret;
 
     /**
-     * private class for start and end time.
+     * Private class for start and end time.
      */
     final static private class TimeStamp {
         final private long startTime;
@@ -64,9 +62,7 @@ public class PerfStats {
         private boolean isEnd() {
             return this.bytes == -1 && this.startTime == -1;
         }
-
     }
-
 
     public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
         this.action = action;
@@ -79,11 +75,10 @@ public class PerfStats {
     }
 
     /**
-     * private class for start and end time.
+     * Private class for start and end time.
      */
     final private class QueueProcessor implements Callable {
         final private long startTime;
-
 
         private QueueProcessor(long startTime) {
             this.startTime = startTime;
@@ -94,16 +89,16 @@ public class PerfStats {
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
             long endTime = 0;
-            boolean yes = true;
+            boolean doWork = true;
             long time;
             TimeStamp t;
 
-            while (yes) {
+            while (doWork) {
                 t = queue.poll();
                 if (t != null) {
                     if (t.isEnd()) {
                         endTime = t.endTime;
-                        yes = false;
+                        doWork = false;
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
                         window.record(t.bytes, latency);
@@ -123,9 +118,8 @@ public class PerfStats {
         }
     }
 
-
     /**
-     * private class for Performance statistics within a given time window.
+     * Private class for Performance statistics within a given time window.
      */
     @NotThreadSafe
     final static private class TimeWindow {
@@ -152,7 +146,7 @@ public class PerfStats {
         }
 
         /**
-         * record the latency and bytes
+         * Record the latency and bytes
          *
          * @param bytes   number of bytes.
          * @param latency latency in ms.
@@ -165,10 +159,11 @@ public class PerfStats {
         }
 
         /**
-         * print the window statistics
+         * Print the window statistics
          */
         private void print(long time) {
             this.lastTime = time;
+            assert this.lastTime > this.startTime:"Invalid Start and EndTime";
             final double elapsed = (this.lastTime - this.startTime) / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
@@ -178,7 +173,7 @@ public class PerfStats {
         }
 
         /**
-         * get the current time duration of this window
+         * Get the current time duration of this window
          *
          * @param time current time.
          */
@@ -193,7 +188,6 @@ public class PerfStats {
         final static int MS_PER_MIN = MS_PER_SEC * 60;
         final static int MS_PER_HR = MS_PER_MIN * 60;
         final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
-
         final String action;
         final int messageSize;
         final long startTime;
@@ -203,7 +197,6 @@ public class PerfStats {
         long maxLatency;
         long totalBytes;
         ArrayList<LatencyRange> latencyRanges;
-
 
         private class LatencyRange {
             private final int latency;
@@ -227,7 +220,6 @@ public class PerfStats {
             this.maxLatency = 0;
             this.count = 0;
         }
-
 
         private void countLatencies() {
             count = 0;
@@ -332,9 +324,8 @@ public class PerfStats {
         }
     }
 
-
     /**
-     * start the performance statistics.
+     * Start the performance statistics.
      *
      * @param startTime start time time
      */
@@ -344,9 +335,8 @@ public class PerfStats {
         }
     }
 
-
     /**
-     * end the final performance statistics.
+     * End the final performance statistics.
      *
      * @param endTime End time
      * @throws ExecutionException   If an exception occurred.
@@ -363,7 +353,7 @@ public class PerfStats {
     }
 
     /**
-     * record the data write/read time of data.
+     * Record the data write/read time of data.
      *
      * @param startTime starting time
      * @param endTime   End time
@@ -373,6 +363,3 @@ public class PerfStats {
         queue.add(new TimeStamp(startTime, endTime, bytes));
     }
 }
-
-
-
