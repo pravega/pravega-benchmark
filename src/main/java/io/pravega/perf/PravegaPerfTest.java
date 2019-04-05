@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -164,7 +164,7 @@ public class PravegaPerfTest {
         final String streamName;
         final String scopeName;
         final boolean recreate;
-        final boolean writeNread;
+        final boolean writeAndRead;
         final int producerCount;
         final int consumerCount;
         final int segmentCount;
@@ -272,9 +272,9 @@ public class PravegaPerfTest {
                     throw new IllegalArgumentException("Error: Must specify the event 'size'");
                 }
 
-                writeNread = consumerCount > 0;
+                writeAndRead = consumerCount > 0;
 
-                if (writeNread) {
+                if (writeAndRead) {
                     produceStats = null;
                 } else {
                     produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
@@ -291,12 +291,12 @@ public class PravegaPerfTest {
                 produceStats = null;
                 eventsPerProducer = 0;
                 eventsPerSec = 0;
-                writeNread = false;
+                writeAndRead = false;
             }
 
             if (consumerCount > 0) {
                 String action;
-                if (writeNread) {
+                if (writeAndRead) {
                     action = "Write/Reading";
                 } else {
                     action = "Reading";
@@ -378,7 +378,7 @@ public class PravegaPerfTest {
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
-                                    eventsPerSec, writeNread, factory,
+                                    eventsPerSec, writeAndRead, factory,
                                     transactionPerCommit))
                             .collect(Collectors.toList());
                 } else {
@@ -388,7 +388,7 @@ public class PravegaPerfTest {
                                     runtimeSec, false,
                                     messageSize, startTime,
                                     produceStats, streamName,
-                                    eventsPerSec, writeNread, factory))
+                                    eventsPerSec, writeAndRead, factory))
                             .collect(Collectors.toList());
                 }
             } else {
@@ -406,7 +406,7 @@ public class PravegaPerfTest {
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
                                 runtimeSec, startTime, consumeStats,
-                                streamName, TIMEOUT, writeNread, factory))
+                                streamName, TIMEOUT, writeAndRead, factory))
                         .collect(Collectors.toList());
             } else {
                 readers = null;

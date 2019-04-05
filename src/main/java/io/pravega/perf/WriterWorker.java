@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
 package io.pravega.perf;
@@ -28,14 +28,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     WriterWorker(int sensorId, int events, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, int eventsPerSec, boolean writeNread) {
+                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
         super(sensorId, events, secondsToRun,
                 messageSize, start, stats,
                 streamName, 0);
         this.eventsPerSec = eventsPerSec;
-        perf = secondsToRun > 0 ? (writeNread ? new EventsWriterTimeRW() : new EventsWriterTime()) :
-                (writeNread ? new EventsWriterRW() : new EventsWriter());
+        perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
+                (writeAndRead ? new EventsWriterRW() : new EventsWriter());
 
         Random random = new Random();
         byte[] bytes = new byte[messageSize];
@@ -45,7 +45,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         payload = new String(bytes, StandardCharsets.US_ASCII);
     }
 
-    /**.
+    /**
      * Writes the data and benchmark
      *
      * @param data   data to write
@@ -54,7 +54,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      */
     public abstract long recordWrite(String data, TriConsumer record);
 
-    /**.
+    /**
      * Writes the data and benchmark
      *
      * @param data data to write
