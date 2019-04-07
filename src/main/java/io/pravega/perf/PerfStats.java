@@ -90,16 +90,14 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            long endTime = 0;
             boolean doWork = true;
-            long time;
+            long time = startTime;
             TimeStamp t;
 
             while (doWork) {
                 t = queue.poll();
                 if (t != null) {
                     if (t.isEnd()) {
-                        endTime = t.endTime;
                         doWork = false;
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
@@ -116,7 +114,7 @@ public class PerfStats {
                     window.reset(time);
                 }
             }
-            latencyRecorder.printTotal(endTime);
+            latencyRecorder.printTotal(time);
             return null;
         }
     }
