@@ -19,10 +19,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -98,16 +100,18 @@ public class PerfStats {
                 if (t != null) {
                     if (t.isEnd()) {
                         endTime = t.endTime;
+                        time = endTime;
                         doWork = false;
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
+                        time = t.startTime;
                         window.record(t.bytes, latency);
                         latencyRecorder.record(t.startTime, t.bytes, latency);
                     }
                 } else {
-                    LockSupport.parkNanos(100);
+                    LockSupport.parkNanos(500);
+                    time = System.currentTimeMillis();
                 }
-                time = System.currentTimeMillis();
                 if (window.windowTimeMS(time) > windowInterval) {
                     window.print(time);
                     window.reset(time);
@@ -163,7 +167,7 @@ public class PerfStats {
          */
         private void print(long time) {
             this.lastTime = time;
-            assert this.lastTime > this.startTime:"Invalid Start and EndTime";
+            assert this.lastTime > this.startTime : "Invalid Start and EndTime";
             final double elapsed = (this.lastTime - this.startTime) / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
