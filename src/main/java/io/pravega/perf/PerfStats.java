@@ -100,14 +100,13 @@ public class PerfStats {
                 if (t != null) {
                     if (t.isEnd()) {
                         endTime = t.endTime;
-                        time = endTime;
                         doWork = false;
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
-                        time = t.startTime;
                         window.record(t.bytes, latency);
                         latencyRecorder.record(t.startTime, t.bytes, latency);
                     }
+                    time = t.endTime;
                 } else {
                     LockSupport.parkNanos(500);
                     time = System.currentTimeMillis();
