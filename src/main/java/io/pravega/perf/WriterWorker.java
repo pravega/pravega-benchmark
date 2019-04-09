@@ -93,11 +93,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
         public void benchmark() throws InterruptedException, IOException {
             final long time = System.currentTimeMillis();
+            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
             final EventsController eCnt = new EventsController(time, eventsPerSec);
-            final StringBuilder buffer = new StringBuilder(time + ", " + workerID + ", " + payload);
+            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
             for (int i = 0; i < events; i++) {
-                final String header = Long.toString(System.currentTimeMillis());
-                final String data = buffer.replace(0, header.length(), header).substring(0, messageSize);
+                final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).substring(0, messageSize);
                 writeData(data);
                 eCnt.control(i);
             }
@@ -125,13 +126,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         public void benchmark() throws InterruptedException, IOException {
             final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
+            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
             final EventsController eCnt = new EventsController(time, eventsPerSec);
-            final StringBuilder buffer = new StringBuilder(time + ", " + workerID + ", " + payload);
+            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
 
             for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = System.currentTimeMillis();
-                final String header = Long.toString(time);
-                final String data = buffer.replace(0, header.length(), header).substring(0, messageSize);
+                final String header = String.format(TIME_HEADER_FORMAT, time);
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).substring(0, messageSize);
                 writeData(data);
                 eCnt.control(i);
             }
