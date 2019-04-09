@@ -66,7 +66,7 @@ public class PravegaPerfTest {
         options.addOption("consumers", true, "number of consumers");
         options.addOption("events", true,
                 "number of events/records if 'time' not specified;\n" +
-                        "otherwise, maximum events per second by producer(s)" +
+                        "otherwise, maximum events per second by producer(s) " +
                         "and/or number of events per consumer");
         options.addOption("time", true, "number of seconds the code runs");
         options.addOption("transaction", true, "Producers use transactions or not");

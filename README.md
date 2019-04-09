@@ -52,7 +52,7 @@ usage: pravega-benchmark
  -events <arg>                  number of events/records if 'time' not
                                 specified;
                                 otherwise, maximum events per second by
-                                producer(s)and/or number of events per
+                                producer(s) and/or number of events per
                                 consumer
  -help                          Help message
  -producers <arg>               number of producers

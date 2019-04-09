@@ -36,14 +36,19 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         this.eventsPerSec = eventsPerSec;
         perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
                 (writeAndRead ? new EventsWriterRW() : new EventsWriter());
+        payload = createPayload(messageSize);
+    }
 
+
+    private String createPayload(int size) {
         Random random = new Random();
-        byte[] bytes = new byte[messageSize];
-        for (int i = 0; i < messageSize; ++i) {
+        byte[] bytes = new byte[size];
+        for (int i = 0; i < size; ++i) {
             bytes[i] = (byte) (random.nextInt(26) + 65);
         }
-        payload = new String(bytes, StandardCharsets.US_ASCII);
+        return new String(bytes, StandardCharsets.US_ASCII);
     }
+
 
     /**
      * Writes the data and benchmark
@@ -87,10 +92,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private class EventsWriterRW implements Performance {
 
         public void benchmark() throws InterruptedException, IOException {
-            final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
+            final long time = System.currentTimeMillis();
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
+            final StringBuilder buffer = new StringBuilder(time + ", " + workerID + ", " + payload);
             for (int i = 0; i < events; i++) {
-                final String val = System.currentTimeMillis() + ", " + workerID + ", ";
-                final String data = (val + payload).substring(0, messageSize);
+                final String header = Long.toString(System.currentTimeMillis());
+                final String data = buffer.replace(0, header.length(), header).substring(0, messageSize);
                 writeData(data);
                 eCnt.control(i);
             }
@@ -119,11 +126,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
             final EventsController eCnt = new EventsController(time, eventsPerSec);
+            final StringBuilder buffer = new StringBuilder(time + ", " + workerID + ", " + payload);
 
             for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = System.currentTimeMillis();
-                final String val = time + ", " + workerID + ", ";
-                final String data = (val + payload).substring(0, messageSize);
+                final String header = Long.toString(time);
+                final String data = buffer.replace(0, header.length(), header).substring(0, messageSize);
                 writeData(data);
                 eCnt.control(i);
             }
