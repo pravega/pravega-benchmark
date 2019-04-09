@@ -311,7 +311,7 @@ public class PravegaPerfTest {
         }
 
         private void start(long startTime) throws IOException {
-            if (produceStats != null) {
+            if (produceStats != null && consumeStats == null) {
                 produceStats.start(startTime);
             }
             if (consumeStats != null) {
@@ -321,7 +321,7 @@ public class PravegaPerfTest {
 
         private void shutdown(long endTime) {
             try {
-                if (produceStats != null) {
+                if (produceStats != null && consumeStats == null) {
                     produceStats.shutdown(endTime);
                 }
                 if (consumeStats != null) {
