@@ -10,37 +10,32 @@
 
 package io.pravega.perf;
 
-import java.time.Instant;
-
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.impl.UTF8StringSerializer;
 import io.pravega.client.stream.ReaderConfig;
-import io.pravega.client.stream.EventRead;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
 /**
- * class for Pravega reader/consumer.
+ * Class for Pravega reader/consumer.
  */
 public class PravegaReaderWorker extends ReaderWorker {
     private final EventStreamReader<String> reader;
-    private final String readerId;
 
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
-                        Instant start, PerfStats stats, String readergrp,
-                        int timeout, ClientFactory factory) {
-        super(readerId, events, secondsToRun, start, stats, readergrp, timeout);
+                        long start, PerfStats stats, String readergrp,
+                        int timeout, boolean writeAndRead, ClientFactory factory) {
+        super(readerId, events, secondsToRun, start, stats, readergrp, timeout, writeAndRead);
 
-        this.readerId = Integer.toString(readerId);
+        final String readerSt = Integer.toString(readerId);
         reader = factory.createReader(
-                this.readerId, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
+                readerSt, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
     }
 
     @Override
     public String readData() {
         try {
-            String data = reader.readNextEvent(timeout).getEvent();
-            return data;
+            return reader.readNextEvent(timeout).getEvent();
         } catch (ReinitializationRequiredException e) {
             throw new IllegalStateException(e);
         }

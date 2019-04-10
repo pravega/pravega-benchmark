@@ -36,7 +36,7 @@ import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
 
 /**
- *  class for Pravega stream and segments.
+ *  Class for Pravega stream and segments.
  */
 public class PravegaStreamHandler {
     final String scope;

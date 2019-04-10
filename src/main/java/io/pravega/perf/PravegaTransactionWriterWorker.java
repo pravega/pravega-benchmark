@@ -10,15 +10,9 @@
 
 package io.pravega.perf;
 
-import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
-
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
-
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.concurrent.GuardedBy;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
@@ -32,12 +26,12 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
 
     PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
-                                   int messageSize, Instant start,
-                                   PerfStats stats, String streamName, ThroughputController tput,
+                                   int messageSize, long start,
+                                   PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
                                    ClientFactory factory, int transactionsPerCommit) {
 
         super(sensorId, events, secondsToRun, isRandomKey,
-                messageSize, start, stats, streamName, tput, factory);
+                messageSize, start, stats, streamName, eventsPerSec, writeAndRead, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;
         eventCount = 0;
@@ -45,10 +39,13 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     }
 
     @Override
-    public CompletableFuture writeData(String key, String data) {
+    public long recordWrite(String data, TriConsumer record) {
+        long time = 0;
         try {
             synchronized (this) {
-                transaction.writeEvent(key, data);
+                time = System.currentTimeMillis();
+                transaction.writeEvent(data);
+                record.accept(time, System.currentTimeMillis(), messageSize);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
                     eventCount = 0;
@@ -59,6 +56,6 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
         } catch (TxnFailedException e) {
             throw new RuntimeException("Transaction Write data failed ", e);
         }
-        return null;
+        return time;
     }
 }

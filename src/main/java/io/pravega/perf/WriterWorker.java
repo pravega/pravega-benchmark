@@ -10,42 +10,64 @@
 
 package io.pravega.perf;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
- * abstract class for Writers.
+ * Abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
+    final private static int MS_PER_SEC = 1000;
     final private Performance perf;
-    final private ThroughputController tput;
+    final private String payload;
+    final private int eventsPerSec;
 
     WriterWorker(int sensorId, int events, int secondsToRun,
-                 boolean isRandomKey, int messageSize, Instant start,
-                 PerfStats stats, String streamName, ThroughputController tput) {
+                 boolean isRandomKey, int messageSize, long start,
+                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
         super(sensorId, events, secondsToRun,
-                isRandomKey, messageSize, start,
-                stats, streamName, 0);
-        this.tput = tput;
-        perf = secondsToRun > 0 ? new ThroughputWriter() : new EventsWriter();
+                messageSize, start, stats,
+                streamName, 0);
+        this.eventsPerSec = eventsPerSec;
+        perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
+                (writeAndRead ? new EventsWriterRW() : new EventsWriter());
+        payload = createPayload(messageSize);
     }
 
-    /**
-     * writes the data.
-     *
-     * @param key  key for data.
-     * @param data data to write
-     */
-    public abstract CompletableFuture writeData(String key, String data);
+
+    private String createPayload(int size) {
+        Random random = new Random();
+        byte[] bytes = new byte[size];
+        for (int i = 0; i < size; ++i) {
+            bytes[i] = (byte) (random.nextInt(26) + 65);
+        }
+        return new String(bytes, StandardCharsets.US_ASCII);
+    }
+
 
     /**
-     * flush the producer data.
+     * Writes the data and benchmark
+     *
+     * @param data   data to write
+     * @param record to call for benchmarking
+     * @return time return the data sent time
+     */
+    public abstract long recordWrite(String data, TriConsumer record);
+
+    /**
+     * Writes the data and benchmark
+     *
+     * @param data data to write
+     */
+    public abstract void writeData(String data);
+
+    /**
+     * Flush the producer data.
      */
     public abstract void flush();
 
@@ -57,67 +79,126 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     private class EventsWriter implements Performance {
 
-        public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            CompletableFuture retFuture = null;
-            Random rand = new Random();
-
+        public void benchmark() throws InterruptedException, IOException {
+            final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
             for (int i = 0; i < events; i++) {
-
-                // Construct event payload
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                String payload = String.format("%-" + messageSize + "s", val);
-                String key;
-                if (isRandomKey) {
-                    key = Integer.toString(workerID + rand.nextInt());
-                } else {
-                    key = Integer.toString(workerID);
-                }
-
-                final Instant startTime = Instant.now();
-                retFuture = writeData(key, payload);
-                // event ingestion
-                retFuture = stats.recordTime(retFuture, startTime, payload.length());
-                stats.print();
-                tput.control(stats.eventsRate());
-
+                recordWrite(payload, stats::recordTime);
+                eCnt.control(i);
             }
-
             flush();
-
-            //Wait for the last packet to get acked
-            retFuture.get();
         }
     }
 
-    private class ThroughputWriter implements Performance {
+    private class EventsWriterRW implements Performance {
 
-        public void benchmark() throws InterruptedException, ExecutionException, IOException {
-            CompletableFuture retFuture = null;
-            Random rand = new Random();
+        public void benchmark() throws InterruptedException, IOException {
+            final long time = System.currentTimeMillis();
+            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
+            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
+            buffer.setLength(messageSize);
+            for (int i = 0; i < events; i++) {
+                final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
+                writeData(data);
+                eCnt.control(i);
+            }
+            flush();
+        }
+    }
 
-            while (Duration.between(StartTime, Instant.now()).getSeconds() < secondsToRun) {
-                // Construct event payload
-                String val = System.currentTimeMillis() + ", " + workerID + ", " + (int) (Math.random() * 200);
-                String payload = String.format("%-" + messageSize + "s", val);
-                String key;
-                if (isRandomKey) {
-                    key = Integer.toString(workerID + rand.nextInt());
-                } else {
-                    key = Integer.toString(workerID);
-                }
+    private class EventsWriterTime implements Performance {
 
-                final Instant beginTime = Instant.now();
-                retFuture = writeData(key, payload);
-                // event ingestion
-                retFuture = stats.recordTime(retFuture, beginTime, payload.length());
-                stats.print();
-                tput.control(stats.eventsRate());
+        public void benchmark() throws InterruptedException, IOException {
+            final long msToRun = secondsToRun * MS_PER_SEC;
+            long time = System.currentTimeMillis();
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
+
+            for (int i = 0; (time - startTime) < msToRun; i++) {
+                time = recordWrite(payload, stats::recordTime);
+                eCnt.control(i);
+            }
+            flush();
+        }
+    }
+
+    private class EventsWriterTimeRW implements Performance {
+
+        public void benchmark() throws InterruptedException, IOException {
+            final long msToRun = secondsToRun * MS_PER_SEC;
+            long time = System.currentTimeMillis();
+            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
+            final EventsController eCnt = new EventsController(time, eventsPerSec);
+            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
+            buffer.setLength(messageSize);
+            for (int i = 0; (time - startTime) < msToRun; i++) {
+                time = System.currentTimeMillis();
+                final String header = String.format(TIME_HEADER_FORMAT, time);
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
+                writeData(data);
+                eCnt.control(i);
+            }
+            flush();
+        }
+    }
+
+    @NotThreadSafe
+    static private class EventsController {
+        private static final long NS_PER_MS = 1000000L;
+        private static final long NS_PER_SEC = 1000 * NS_PER_MS;
+        private static final long MIN_SLEEP_NS = 2 * NS_PER_MS;
+        private final long startTime;
+        private final long sleepTimeNs;
+        private final int eventsPerSec;
+        private long toSleepNs = 0;
+
+        /**
+         * @param eventsPerSec events per second
+         */
+        private EventsController(long start, int eventsPerSec) {
+            this.startTime = start;
+            this.eventsPerSec = eventsPerSec;
+            this.sleepTimeNs = this.eventsPerSec > 0 ?
+                    NS_PER_SEC / this.eventsPerSec : 0;
+        }
+
+        /**
+         * Blocks for small amounts of time to achieve targetThroughput/events per sec
+         *
+         * @param events current events
+         */
+        private void control(long events) {
+            if (this.eventsPerSec <= 0) {
+                return;
             }
 
-            flush();
+            float elapsedSec = (System.currentTimeMillis() - startTime) / 1000.f;
 
-            //Wait for the last packet to get acked
-            retFuture.get();
+            if ((events / elapsedSec) < this.eventsPerSec) {
+                return;
+            }
+
+            // control throughput / number of events by sleeping, on average,
+            toSleepNs += sleepTimeNs;
+            // If threshold reached, sleep a little
+            if (toSleepNs >= MIN_SLEEP_NS) {
+                long sleepStart = System.nanoTime();
+                try {
+                    final long sleepMs = toSleepNs / NS_PER_MS;
+                    final long sleepNs = toSleepNs - sleepMs * NS_PER_MS;
+                    Thread.sleep(sleepMs, (int) sleepNs);
+                } catch (InterruptedException e) {
+                    // will be taken care in finally block
+                } finally {
+                    // in case of short sleeps or oversleep ;adjust it for next sleep duration
+                    final long sleptNS = System.nanoTime() - sleepStart;
+                    if (sleptNS > 0) {
+                        toSleepNs -= sleptNS;
+                    } else {
+                        toSleepNs = 0;
+                    }
+                }
+            }
         }
     }
 }
