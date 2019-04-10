@@ -96,9 +96,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
             final EventsController eCnt = new EventsController(time, eventsPerSec);
             final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
+            buffer.setLength(messageSize);
             for (int i = 0; i < events; i++) {
                 final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
-                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).substring(0, messageSize);
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
                 writeData(data);
                 eCnt.control(i);
             }
@@ -129,11 +130,11 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
             final EventsController eCnt = new EventsController(time, eventsPerSec);
             final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
-
+            buffer.setLength(messageSize);
             for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = System.currentTimeMillis();
                 final String header = String.format(TIME_HEADER_FORMAT, time);
-                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).substring(0, messageSize);
+                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
                 writeData(data);
                 eCnt.control(i);
             }
