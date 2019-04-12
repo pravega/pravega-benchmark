@@ -51,7 +51,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data   data to write
      * @param record to call for benchmarking
@@ -60,7 +60,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract long recordWrite(String data, TriConsumer record);
 
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data data to write
      */
@@ -103,7 +103,6 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 writeData(data);
                 eCnt.control(i);
             }
-            flush();
         }
     }
 
@@ -138,7 +137,6 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 writeData(data);
                 eCnt.control(i);
             }
-            flush();
         }
     }
 

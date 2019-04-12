@@ -69,12 +69,13 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         public void benchmark() throws IOException {
             String ret = null;
             try {
-                for (int i = 0; i < events; i++) {
+                for (int i = 0; i < events; ) {
                     ret = readData();
                     if (ret != null) {
                         final long endTime = System.currentTimeMillis();
-                        final long startTime = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
-                        stats.recordTime(startTime, endTime, ret.length());
+                        final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
+                        stats.recordTime(start, endTime, ret.length());
+                        i++;
                     }
                 }
             } finally {
@@ -91,7 +92,6 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             long time = System.currentTimeMillis();
 
             try {
-
                 while ((time - startTime) < msToRun) {
                     time = System.currentTimeMillis();
                     ret = readData();
@@ -113,9 +113,9 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
             try {
                 while ((time - startTime) < msToRun) {
                     ret = readData();
+                    time = System.currentTimeMillis();
                     if (ret != null) {
-                        time = System.currentTimeMillis();
-                        final long startTime = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
+                        final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
                         stats.recordTime(startTime, time, ret.length());
                     }
                 }

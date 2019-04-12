@@ -17,6 +17,11 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 
@@ -39,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Properties;
 
 /**
  * Performance benchmark for Pravega.
@@ -82,6 +88,7 @@ public class PravegaPerfTest {
                         "if -1, get the maximum throughput");
         options.addOption("writecsv", true, "csv file to record write latencies");
         options.addOption("readcsv", true, "csv file to record read latencies");
+        options.addOption("kafka", true, "Kafka Benchmarking");
 
         options.addOption("help", false, "Help message");
 
@@ -140,7 +147,17 @@ public class PravegaPerfTest {
 
     public static Test createTest(long startTime, CommandLine commandline, Options options) {
         try {
-            return new PravegaTest(startTime, commandline);
+            boolean runKafka;
+            if (commandline.hasOption("kafka")) {
+                runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+            } else {
+                runKafka = false;
+            }
+            if (runKafka) {
+                return new KafkaTest(startTime, commandline);
+            } else {
+                return new PravegaTest(startTime, commandline);
+            }
         } catch (IllegalArgumentException ex) {
             ex.printStackTrace();
             final HelpFormatter formatter = new HelpFormatter();
@@ -156,7 +173,7 @@ public class PravegaPerfTest {
     static private abstract class Test {
         static final int MAXTIME = 60 * 60 * 24;
         static final int REPORTINGINTERVAL = 5000;
-        static final int TIMEOUT = 10;
+        static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
         final String controllerUri;
@@ -307,7 +324,6 @@ public class PravegaPerfTest {
                 consumeStats = null;
                 eventsPerConsumer = 0;
             }
-
         }
 
         private void start(long startTime) throws IOException {
@@ -414,4 +430,88 @@ public class PravegaPerfTest {
             return readers;
         }
     }
+
+    static private class KafkaTest extends Test {
+        final private Properties producerConfig;
+        final private Properties consumerConfig;
+
+        KafkaTest(long startTime, CommandLine commandline) throws
+                IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
+            super(startTime, commandline);
+            producerConfig = createProducerConfig();
+            consumerConfig = createConsumerConfig();
+        }
+
+        private Properties createProducerConfig() {
+            if (producerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ProducerConfig.ACKS_CONFIG, "all");
+            props.put(ProducerConfig.RETRIES_CONFIG, 0);
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            return props;
+        }
+
+        private Properties createConsumerConfig() {
+            if (consumerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1);
+            if (writeAndRead) {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, streamName);
+            } else {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, Long.toString(startTime));
+            }
+            return props;
+        }
+
+
+        public List<Callable<Void>> getProducers() {
+            final List<Callable<Void>> writers;
+
+            if (producerCount > 0) {
+                if (transactionPerCommit > 0) {
+                    throw new IllegalArgumentException("Kafka Transactions are not supported");
+                } else {
+                    writers = IntStream.range(0, producerCount)
+                            .boxed()
+                            .map(i -> new KafkaWriterWorker(i, eventsPerProducer,
+                                    runtimeSec, false,
+                                    messageSize, startTime,
+                                    produceStats, streamName,
+                                    eventsPerSec, writeAndRead, producerConfig))
+                            .collect(Collectors.toList());
+                }
+            } else {
+                writers = null;
+            }
+            return writers;
+        }
+
+        public List<Callable<Void>> getConsumers() throws URISyntaxException {
+            final List<Callable<Void>> readers;
+            if (consumerCount > 0) {
+                readers = IntStream.range(0, consumerCount)
+                        .boxed()
+                        .map(i -> new KafkaReaderWorker(i, eventsPerConsumer,
+                                runtimeSec, startTime, consumeStats,
+                                streamName, TIMEOUT, writeAndRead, consumerConfig))
+                        .collect(Collectors.toList());
+
+            } else {
+                readers = null;
+            }
+            return readers;
+        }
+    }
+
 }

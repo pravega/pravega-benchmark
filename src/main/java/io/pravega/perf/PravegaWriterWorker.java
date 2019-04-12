@@ -51,6 +51,7 @@ public class PravegaWriterWorker extends WriterWorker {
     @Override
     public void writeData(String data) {
         producer.writeEvent(data);
+        flush();
     }
 
     @Override
