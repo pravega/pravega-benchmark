@@ -43,13 +43,6 @@ public class KafkaWriterWorker extends WriterWorker {
     @Override
     public void writeData(String data) {
         producer.send(new ProducerRecord<>(streamName, data));
-        /*
-          flush is required here for following reasons:
-          1. The writeData is called for End to End latency mode; hence make sure that data is sent.
-          2. kafka buffering makes the too many writes; flushing will moderate the kafka producer.
-          3. If the flush called after several iterations, then flush will take too much of time.
-         */
-        flush();
     }
 
 

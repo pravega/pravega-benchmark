@@ -42,7 +42,7 @@ untar the Pravega benchmark tool to local folder
 tar -xvf ./build/distributions/pravega-benchmark.tar -C ./run
 ```
 
-Running Pravega bencmark tool locally:
+Running Pravega benchmark tool locally:
 
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
