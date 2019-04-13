@@ -255,6 +255,7 @@ public class PerfStats {
         }
 
         public void record(int bytes, int latency) {
+            assert latency < latencies.length : "Invalid latency";
             totalBytes += bytes;
             latencies[latency]++;
         }
