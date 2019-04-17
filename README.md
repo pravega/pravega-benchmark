@@ -10,7 +10,7 @@ You may obtain a copy of the License at
 
 # Pravega Benchmark Tool
 
-The Pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
+The Pravega benchmark tool used for the performance benchmarking of pravega and Kafka streaming storage clusters.
 This tool performs the throughput and latency analysis for the multi producers/writers and consumers/readers of pravega.
 it also validates the end to end latency. The write and/or read latencies can be stored in a CSV file for later analysis.
 At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th and 99.9th latency percentiles.
@@ -55,6 +55,7 @@ usage: pravega-benchmark
                                 producer(s) and/or number of events per
                                 consumer
  -help                          Help message
+ -kafka <arg>                   Kafka Benchmarking
  -producers <arg>               number of producers
  -readcsv <arg>                 csv file to record read latencies
  -recreate <arg>                If the stream is already existing, delete
@@ -166,5 +167,9 @@ The -throughput -1 specifies the writes tries to write the events at the maximum
 ```
 
 ### Recording the latencies to CSV files
-user can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
+User can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
 in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
+
+### Kafka Benchmarking
+User can set the option "-kafka true"  for Kafka Benchmarking. User should create the topics manually before running this for kafka benchmarking.
+Unlike pravega benchmarking, this tool does not create the topic automatically. This tools treats stream name as a topic name.
