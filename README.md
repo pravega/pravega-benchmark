@@ -59,7 +59,7 @@ usage: pravega-benchmark
  -producers <arg>               number of producers
  -readcsv <arg>                 csv file to record read latencies
  -recreate <arg>                If the stream is already existing, delete
-                                it and recreate it
+                                it and recreate it (not applicable for Kafka)
  -segments <arg>                Number of segments
  -size <arg>                    Size of each message (event or record)
  -stream <arg>                  Stream name

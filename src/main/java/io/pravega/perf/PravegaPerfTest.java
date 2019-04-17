@@ -81,7 +81,7 @@ public class PravegaPerfTest {
         options.addOption("segments", true, "Number of segments");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("recreate", true,
-                "If the stream is already existing, delete it and recreate it");
+                "If the stream is already existing, delete it and recreate it (not applicable for Kafka)");
         options.addOption("throughput", true,
                 "if > 0 , throughput in MB/s\n" +
                         "if 0 , writes 'events'\n" +
