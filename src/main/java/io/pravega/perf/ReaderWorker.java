@@ -52,11 +52,13 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         public void benchmark() throws IOException {
             String ret = null;
             try {
-                for (int i = 0; i < events; i++) {
+                int i = 0;
+                while (i < events) {
                     final long startTime = System.currentTimeMillis();
                     ret = readData();
                     if (ret != null) {
                         stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
+                        i++;
                     }
                 }
             } finally {
@@ -69,7 +71,8 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         public void benchmark() throws IOException {
             String ret = null;
             try {
-                for (int i = 0; i < events; ) {
+                int i = 0;
+                while (i < events) {
                     ret = readData();
                     if (ret != null) {
                         final long endTime = System.currentTimeMillis();
