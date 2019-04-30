@@ -451,6 +451,8 @@ public class PravegaPerfTest {
             props.put(ProducerConfig.ACKS_CONFIG, "all");
             props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
             props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            // Enabling the producer IDEMPOTENCE is must to compare between Kafka and Pravega
+            props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
             return props;
         }
 
