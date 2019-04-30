@@ -19,6 +19,7 @@ import io.pravega.client.stream.impl.ClientFactoryImpl;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.requests.IsolationLevel;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
@@ -45,6 +46,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.Properties;
+import java.util.Locale;
 
 /**
  * Performance benchmark for Pravega.
@@ -465,6 +467,8 @@ public class PravegaPerfTest {
             props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1);
+            // Enabling the consumer to READ_COMMITTED is must to compare between Kafka and Pravega
+            props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.name().toLowerCase(Locale.ROOT));
             if (writeAndRead) {
                 props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
                 props.put(ConsumerConfig.GROUP_ID_CONFIG, streamName);
