@@ -395,7 +395,7 @@ public class PravegaPerfTest {
                 }
             }
             if (consumerCount > 0) {
-                readerGroup = streamHandle.createReaderGroup();
+                readerGroup = streamHandle.createReaderGroup(!writeAndRead);
             } else {
                 readerGroup = null;
             }
