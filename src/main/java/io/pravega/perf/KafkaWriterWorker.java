@@ -52,7 +52,7 @@ public class KafkaWriterWorker extends WriterWorker {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         producer.close();
     }
 }

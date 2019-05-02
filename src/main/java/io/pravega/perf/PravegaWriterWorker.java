@@ -59,7 +59,7 @@ public class PravegaWriterWorker extends WriterWorker {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         producer.close();
     }
 }
