@@ -328,7 +328,7 @@ public class PravegaPerfTest {
             }
         }
 
-        private void start(long startTime) throws IOException {
+        public void start(long startTime) throws IOException {
             if (produceStats != null && !writeAndRead) {
                 produceStats.start(startTime);
             }
@@ -337,7 +337,7 @@ public class PravegaPerfTest {
             }
         }
 
-        private void shutdown(long endTime) {
+        public void shutdown(long endTime) {
             try {
                 if (produceStats != null && !writeAndRead) {
                     produceStats.shutdown(endTime);
@@ -359,6 +359,7 @@ public class PravegaPerfTest {
     static private class PravegaTest extends Test {
         final PravegaStreamHandler streamHandle;
         final ClientFactory factory;
+        final ReaderGroup readerGroup;
 
         PravegaTest(long startTime, CommandLine commandline) throws
                 IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
@@ -380,6 +381,11 @@ public class PravegaPerfTest {
                 } else {
                     streamHandle.scale();
                 }
+            }
+            if (consumerCount > 0) {
+                readerGroup = streamHandle.createReaderGroup();
+            } else {
+                readerGroup = null;
             }
 
             factory = new ClientFactoryImpl(scopeName, controller);
@@ -419,7 +425,6 @@ public class PravegaPerfTest {
         public List<Callable<Void>> getConsumers() throws URISyntaxException {
             final List<Callable<Void>> readers;
             if (consumerCount > 0) {
-                final ReaderGroup readerGroup = streamHandle.createReaderGroup();
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
@@ -430,6 +435,14 @@ public class PravegaPerfTest {
                 readers = null;
             }
             return readers;
+        }
+
+        @Override
+        public void shutdown(long endTime) {
+            if (readerGroup != null) {
+                readerGroup.close();
+            }
+            super.shutdown(endTime);
         }
     }
 
