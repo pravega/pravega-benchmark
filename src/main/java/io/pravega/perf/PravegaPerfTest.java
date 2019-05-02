@@ -116,8 +116,8 @@ public class PravegaPerfTest {
         final ForkJoinPool executor = new ForkJoinPool();
 
         try {
-            final List<Callable<Void>> producers = perfTest.getProducers();
-            final List<Callable<Void>> consumers = perfTest.getConsumers();
+            final List<WriterWorker> producers = perfTest.getProducers();
+            final List<ReaderWorker> consumers = perfTest.getConsumers();
 
             final List<Callable<Void>> workers = Stream.of(producers, consumers)
                     .filter(x -> x != null)
@@ -131,6 +131,12 @@ public class PravegaPerfTest {
                         executor.shutdown();
                         executor.awaitTermination(1, TimeUnit.SECONDS);
                         perfTest.shutdown(System.currentTimeMillis());
+                        if (consumers != null) {
+                            consumers.forEach(ReaderWorker::close);
+                        }
+                        if (producers != null) {
+                            producers.forEach(WriterWorker::close);
+                        }
                     } catch (InterruptedException ex) {
                         ex.printStackTrace();
                     }
@@ -141,6 +147,12 @@ public class PravegaPerfTest {
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
             perfTest.shutdown(System.currentTimeMillis());
+            if (consumers != null) {
+                consumers.forEach(ReaderWorker::close);
+            }
+            if (producers != null) {
+                producers.forEach(WriterWorker::close);
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -350,9 +362,9 @@ public class PravegaPerfTest {
             }
         }
 
-        public abstract List<Callable<Void>> getProducers();
+        public abstract List<WriterWorker> getProducers();
 
-        public abstract List<Callable<Void>> getConsumers() throws URISyntaxException;
+        public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
 
     }
 
@@ -391,8 +403,8 @@ public class PravegaPerfTest {
             factory = new ClientFactoryImpl(scopeName, controller);
         }
 
-        public List<Callable<Void>> getProducers() {
-            final List<Callable<Void>> writers;
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
 
             if (producerCount > 0) {
                 if (transactionPerCommit > 0) {
@@ -422,8 +434,8 @@ public class PravegaPerfTest {
             return writers;
         }
 
-        public List<Callable<Void>> getConsumers() throws URISyntaxException {
-            final List<Callable<Void>> readers;
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
             if (consumerCount > 0) {
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
@@ -493,8 +505,8 @@ public class PravegaPerfTest {
         }
 
 
-        public List<Callable<Void>> getProducers() {
-            final List<Callable<Void>> writers;
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
 
             if (producerCount > 0) {
                 if (transactionPerCommit > 0) {
@@ -515,8 +527,8 @@ public class PravegaPerfTest {
             return writers;
         }
 
-        public List<Callable<Void>> getConsumers() throws URISyntaxException {
-            final List<Callable<Void>> readers;
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
             if (consumerCount > 0) {
                 readers = IntStream.range(0, consumerCount)
                         .boxed()

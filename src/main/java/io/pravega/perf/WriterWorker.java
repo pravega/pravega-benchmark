@@ -71,6 +71,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      */
     public abstract void flush();
 
+    /**
+     * Flush the producer data.
+     */
+    public abstract void close();
+
+
     @Override
     public Void call() throws InterruptedException, ExecutionException, IOException {
         perf.benchmark();

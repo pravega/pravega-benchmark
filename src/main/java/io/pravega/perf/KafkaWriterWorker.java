@@ -50,4 +50,9 @@ public class KafkaWriterWorker extends WriterWorker {
     public void flush() {
         producer.flush();
     }
+
+    @Override
+    public void close() {
+        producer.close();
+    }
 }
