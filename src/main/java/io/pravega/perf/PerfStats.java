@@ -189,7 +189,7 @@ public class PerfStats {
         final static int MS_PER_SEC = 1000;
         final static int MS_PER_MIN = MS_PER_SEC * 60;
         final static int MS_PER_HR = MS_PER_MIN * 60;
-        final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999};
+        final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999, 0.9999};
         final String action;
         final int messageSize;
         final long startTime;
@@ -274,9 +274,9 @@ public class PerfStats {
 
             System.out.printf(
                     "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency" +
-                            ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th\n",
+                            ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th, %d ms 99.99th.\n",
                     count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
-                    percs[0], percs[1], percs[2], percs[3], percs[4]);
+                    percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]);
         }
     }
 

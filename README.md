@@ -13,7 +13,7 @@ You may obtain a copy of the License at
 The Pravega benchmark tool used for the performance benchmarking of Pravega and Kafka streaming storage clusters.
 This tool performs the throughput and latency analysis for the multi producers/writers and consumers/readers of pravega.
 it also validates the end to end latency. The write and/or read latencies can be stored in a CSV file for later analysis.
-At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th and 99.9th latency percentiles.
+At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th, 99.9th and 99.99th latency percentiles.
 
 
 ### Prerequisites
