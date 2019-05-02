@@ -80,6 +80,7 @@ public class PerfStats {
      * Private class for start and end time.
      */
     final private class QueueProcessor implements Callable {
+        final private static int PARK_NS = 1000;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -106,7 +107,7 @@ public class PerfStats {
                     }
                     time = t.endTime;
                 } else {
-                    LockSupport.parkNanos(500);
+                    LockSupport.parkNanos(PARK_NS);
                     time = System.currentTimeMillis();
                 }
                 if (window.windowTimeMS(time) > windowInterval) {
