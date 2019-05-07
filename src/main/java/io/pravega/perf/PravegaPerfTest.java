@@ -107,8 +107,8 @@ public class PravegaPerfTest {
         final ForkJoinPool executor = new ForkJoinPool();
 
         try {
-            final List<Callable<Void>> producers = perfTest.getProducers();
-            final List<Callable<Void>> consumers = perfTest.getConsumers();
+            final List<WriterWorker> producers = perfTest.getProducers();
+            final List<ReaderWorker> consumers = perfTest.getConsumers();
 
             final List<Callable<Void>> workers = Stream.of(producers, consumers)
                     .filter(x -> x != null)
@@ -122,6 +122,12 @@ public class PravegaPerfTest {
                         executor.shutdown();
                         executor.awaitTermination(1, TimeUnit.SECONDS);
                         perfTest.shutdown(System.currentTimeMillis());
+                        if (consumers != null) {
+                            consumers.forEach(ReaderWorker::close);
+                        }
+                        if (producers != null) {
+                            producers.forEach(WriterWorker::close);
+                        }
                     } catch (InterruptedException ex) {
                         ex.printStackTrace();
                     }
@@ -132,6 +138,12 @@ public class PravegaPerfTest {
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
             perfTest.shutdown(System.currentTimeMillis());
+            if (consumers != null) {
+                consumers.forEach(ReaderWorker::close);
+            }
+            if (producers != null) {
+                producers.forEach(WriterWorker::close);
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -156,7 +168,7 @@ public class PravegaPerfTest {
     static private abstract class Test {
         static final int MAXTIME = 60 * 60 * 24;
         static final int REPORTINGINTERVAL = 5000;
-        static final int TIMEOUT = 10;
+        static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
         final String controllerUri;
@@ -310,8 +322,8 @@ public class PravegaPerfTest {
 
         }
 
-        private void start(long startTime) throws IOException {
-            if (produceStats != null && consumeStats == null) {
+        public void start(long startTime) throws IOException {
+            if (produceStats != null && !writeAndRead) {
                 produceStats.start(startTime);
             }
             if (consumeStats != null) {
@@ -319,9 +331,9 @@ public class PravegaPerfTest {
             }
         }
 
-        private void shutdown(long endTime) {
+        public void shutdown(long endTime) {
             try {
-                if (produceStats != null && consumeStats == null) {
+                if (produceStats != null && !writeAndRead) {
                     produceStats.shutdown(endTime);
                 }
                 if (consumeStats != null) {
@@ -332,15 +344,16 @@ public class PravegaPerfTest {
             }
         }
 
-        public abstract List<Callable<Void>> getProducers();
+        public abstract List<WriterWorker> getProducers();
 
-        public abstract List<Callable<Void>> getConsumers() throws URISyntaxException;
+        public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
 
     }
 
     static private class PravegaTest extends Test {
         final PravegaStreamHandler streamHandle;
         final ClientFactory factory;
+        final ReaderGroup readerGroup;
 
         PravegaTest(long startTime, CommandLine commandline) throws
                 IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
@@ -363,12 +376,17 @@ public class PravegaPerfTest {
                     streamHandle.scale();
                 }
             }
+            if (consumerCount > 0) {
+                readerGroup = streamHandle.createReaderGroup(!writeAndRead);
+            } else {
+                readerGroup = null;
+            }
 
             factory = new ClientFactoryImpl(scopeName, controller);
         }
 
-        public List<Callable<Void>> getProducers() {
-            final List<Callable<Void>> writers;
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
 
             if (producerCount > 0) {
                 if (transactionPerCommit > 0) {
@@ -398,10 +416,9 @@ public class PravegaPerfTest {
             return writers;
         }
 
-        public List<Callable<Void>> getConsumers() throws URISyntaxException {
-            final List<Callable<Void>> readers;
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
             if (consumerCount > 0) {
-                final ReaderGroup readerGroup = streamHandle.createReaderGroup();
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
@@ -412,6 +429,14 @@ public class PravegaPerfTest {
                 readers = null;
             }
             return readers;
+        }
+
+        @Override
+        public void shutdown(long endTime) {
+            if (readerGroup != null) {
+                readerGroup.close();
+            }
+            super.shutdown(endTime);
         }
     }
 }

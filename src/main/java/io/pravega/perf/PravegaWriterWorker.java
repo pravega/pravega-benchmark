@@ -57,4 +57,9 @@ public class PravegaWriterWorker extends WriterWorker {
     public void flush() {
         producer.flush();
     }
+
+    @Override
+    public synchronized void close() {
+        producer.close();
+    }
 }

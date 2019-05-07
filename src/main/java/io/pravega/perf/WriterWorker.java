@@ -51,7 +51,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data   data to write
      * @param record to call for benchmarking
@@ -60,7 +60,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract long recordWrite(String data, TriConsumer record);
 
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data data to write
      */
@@ -70,6 +70,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      * Flush the producer data.
      */
     public abstract void flush();
+
+    /**
+     * Flush the producer data.
+     */
+    public abstract void close();
+
 
     @Override
     public Void call() throws InterruptedException, ExecutionException, IOException {
@@ -101,9 +107,16 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
                 final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
                 writeData(data);
+                /*
+                flush is required here for following reasons:
+                1. The writeData is called for End to End latency mode; hence make sure that data is sent.
+                2. In case of kafka benchmarking, the buffering makes too many writes;
+                   flushing moderates the kafka producer.
+                3. If the flush called after several iterations, then flush may take too much of time.
+                */
+                flush();
                 eCnt.control(i);
             }
-            flush();
         }
     }
 
@@ -136,9 +149,16 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 final String header = String.format(TIME_HEADER_FORMAT, time);
                 final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
                 writeData(data);
+                /*
+                flush is required here for following reasons:
+                1. The writeData is called for End to End latency mode; hence make sure that data is sent.
+                2. In case of kafka benchmarking, the buffering makes too many writes;
+                   flushing moderates the kafka producer.
+                3. If the flush called after several iterations, then flush may take too much of time.
+                */
+                flush();
                 eCnt.control(i);
             }
-            flush();
         }
     }
 

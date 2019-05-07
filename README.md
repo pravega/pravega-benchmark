@@ -13,7 +13,7 @@ You may obtain a copy of the License at
 The Pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
 This tool performs the throughput and latency analysis for the multi producers/writers and consumers/readers of pravega.
 it also validates the end to end latency. The write and/or read latencies can be stored in a CSV file for later analysis.
-At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th and 99.9th latency percentiles.
+At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th, 99.9th and 99.99th latency percentiles.
 
 
 ### Prerequisites
@@ -42,7 +42,7 @@ untar the Pravega benchmark tool to local folder
 tar -xvf ./build/distributions/pravega-benchmark.tar -C ./run
 ```
 
-Running Pravega bencmark tool locally:
+Running Pravega benchmark tool locally:
 
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
@@ -87,8 +87,8 @@ The Pravega benchmark tool can be executed in the following modes:
 ```
 
 ### 1 - Burst Mode
-In this mode, the Pravega benchmark tool pushes/pulls the messages to/from the pravega client as much as possible.
-This mode is used to find the maximum and throughput that can be obtained from the pravega cluster.
+In this mode, the Pravega benchmark tool pushes/pulls the messages to/from the Pravega client as much as possible.
+This mode is used to find the maximum and throughput that can be obtained from the Pravega cluster.
 This mode can be used for both producers and consumers.
 
 ```
@@ -109,8 +109,8 @@ in the case you want to write/read the certain number of events use the -events 
 ```
 
 ### 2 - Throughput Mode
-In this mode, the Pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum throughput in terms of Mega Bytes/second (MB/s).
-This mode is used to find the least latency that can be obtained from the pravega cluster for given throughput.
+In this mode, the Pravega benchmark tool pushes the messages to the Pravega client with specified approximate maximum throughput in terms of Mega Bytes/second (MB/s).
+This mode is used to find the least latency that can be obtained from the Pravega cluster for given throughput.
 This mode is used only for write operation.
 
 ```
@@ -135,8 +135,8 @@ in the case you want to write/read the certain number of events use the -events 
 
 ### 3 - OPS Mode or  Events Rate / Rate Limiter Mode
 This mode is another form of controlling writers throughput by limiting the number of events per second.
-In this mode, the Pravega benchmark tool pushes the messages to the pravega client with specified approximate maximum events per sec.
-This mode is used to find the least latency  that can be obtained from the pravega cluster for events rate.
+In this mode, the Pravega benchmark tool pushes the messages to the Pravega client with specified approximate maximum events per sec.
+This mode is used to find the least latency  that can be obtained from the Pravega cluster for events rate.
 This mode is used only for write operation.
 
 ```
@@ -152,7 +152,7 @@ Note that in this mode, there is 'NO total number of events' to specify hence us
 ```
 
 ### 4 - End to End Latency Mode
-In this mode, the Pravega benchmark tool writes and read the messages to the pravega cluster and records the end to end latency.
+In this mode, the Pravega benchmark tool writes and read the messages to the Pravega cluster and records the end to end latency.
 End to end latency means the time duration between the beginning of the writing event/record to stream and the time after reading the event/record.
 in this mode user must specify both the number of producers and consumers.
 The -throughput option (Throughput mode) or -events (late limiter) can used to limit the writers throughput or events rate.
@@ -166,5 +166,5 @@ The -throughput -1 specifies the writes tries to write the events at the maximum
 ```
 
 ### Recording the latencies to CSV files
-user can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
+User can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
 in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
