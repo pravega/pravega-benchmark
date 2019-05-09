@@ -321,7 +321,12 @@ public class PravegaPerfTest {
                 }
 
                 if (flushEvents < Integer.MAX_VALUE) {
-                    flushEventsPerProducer = flushEvents / producerCount;
+                    int perProducer = flushEvents / producerCount;
+                    if (perProducer < 1) {
+                        flushEventsPerProducer = 1;
+                    } else {
+                        flushEventsPerProducer = perProducer;
+                    }
                 } else {
                     flushEventsPerProducer = Integer.MAX_VALUE;
                 }
