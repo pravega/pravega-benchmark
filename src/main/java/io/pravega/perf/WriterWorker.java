@@ -25,15 +25,15 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private Performance perf;
     final private String payload;
     final private int eventsPerSec;
+    final private int flushEvents;
 
     WriterWorker(int sensorId, int events, int flushEvents, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
                  PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
-        super(sensorId, events, flushEvents,
-                secondsToRun, messageSize, start,
-                stats, streamName, 0);
+        super(sensorId, events, secondsToRun, messageSize, start, stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
+        this.flushEvents = flushEvents;
         perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
                 (writeAndRead ? new EventsWriterRW() : new EventsWriter());
         payload = createPayload(messageSize);
@@ -120,7 +120,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
                 flush();
-                eCnt.control(i, System.currentTimeMillis());
+                eCnt.control(i);
             }
         }
     }
@@ -132,12 +132,21 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             long time = System.currentTimeMillis();
             final EventsController eCnt = new EventsController(time, eventsPerSec);
 
-            for (int i = 0; (time - startTime) < msToRun; i++) {
-                time = recordWrite(payload, stats::recordTime);
-                if ((flushEvents < Integer.MAX_VALUE) && ((i + 1) % flushEvents == 0)) {
-                    flush();
+            if (flushEvents < Integer.MAX_VALUE) {
+                int i = 0;
+                while ((time - startTime) < msToRun) {
+                    time = recordWrite(payload, stats::recordTime);
+                    eCnt.control(i, time);
+                    i++;
+                    if ((i % flushEvents) == 0) {
+                        flush();
+                    }
                 }
-                eCnt.control(i, time);
+            } else {
+                for (int i = 0; (time - startTime) < msToRun; i++) {
+                    time = recordWrite(payload, stats::recordTime);
+                    eCnt.control(i, time);
+                }
             }
             flush();
         }
@@ -165,7 +174,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
                 flush();
-                eCnt.control(i, System.currentTimeMillis());
+                eCnt.control(i);
             }
         }
     }
@@ -194,13 +203,28 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
          * Blocks for small amounts of time to achieve targetThroughput/events per sec
          *
          * @param events current events
-         * @param time   current time
          */
-        private void control(long events, long time) {
+        void control(long events) {
             if (this.eventsPerSec <= 0) {
                 return;
             }
+            needSleep(events, System.currentTimeMillis());
+        }
 
+        /**
+         * Blocks for small amounts of time to achieve targetThroughput/events per sec
+         *
+         * @param events current events
+         * @param time   current time
+         */
+        void control(long events, long time) {
+            if (this.eventsPerSec <= 0) {
+                return;
+            }
+            needSleep(events, time);
+        }
+
+        private void needSleep(long events, long time) {
             float elapsedSec = (time - startTime) / 1000.f;
 
             if ((events / elapsedSec) < this.eventsPerSec) {
