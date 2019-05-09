@@ -13,6 +13,7 @@ package io.pravega.perf;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
+
 import javax.annotation.concurrent.GuardedBy;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
@@ -30,7 +31,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
                                    PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
                                    ClientFactory factory, int transactionsPerCommit) {
 
-        super(sensorId, events, secondsToRun, isRandomKey,
+        super(sensorId, events, Integer.MAX_VALUE, secondsToRun, isRandomKey,
                 messageSize, start, stats, streamName, eventsPerSec, writeAndRead, factory);
 
         this.transactionsPerCommit = transactionsPerCommit;

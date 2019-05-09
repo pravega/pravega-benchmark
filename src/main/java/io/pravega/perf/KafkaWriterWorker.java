@@ -20,14 +20,14 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 public class KafkaWriterWorker extends WriterWorker {
     final private KafkaProducer<String, String> producer;
 
-    KafkaWriterWorker(int sensorId, int events, int secondsToRun,
-                      boolean isRandomKey, int messageSize, long start,
-                      PerfStats stats, String streamName, int eventsPerSec,
-                      boolean writeAndRead, Properties producerProps) {
+    KafkaWriterWorker(int sensorId, int events, int flushEvents,
+                      int secondsToRun, boolean isRandomKey, int messageSize,
+                      long start, PerfStats stats, String streamName,
+                      int eventsPerSec, boolean writeAndRead, Properties producerProps) {
 
-        super(sensorId, events, secondsToRun,
-                isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead);
+        super(sensorId, events, flushEvents,
+                secondsToRun, isRandomKey, messageSize,
+                start, stats, streamName, eventsPerSec, writeAndRead);
 
         this.producer = new KafkaProducer<>(producerProps);
     }

@@ -26,13 +26,13 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private String payload;
     final private int eventsPerSec;
 
-    WriterWorker(int sensorId, int events, int secondsToRun,
+    WriterWorker(int sensorId, int events, int flushEvents, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
                  PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
-        super(sensorId, events, secondsToRun,
-                messageSize, start, stats,
-                streamName, 0);
+        super(sensorId, events, flushEvents,
+                secondsToRun, messageSize, start,
+                stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
         perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
                 (writeAndRead ? new EventsWriterRW() : new EventsWriter());
@@ -87,11 +87,16 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
         public void benchmark() throws InterruptedException, IOException {
             final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
-            for (int i = 0; i < events; i++) {
-                recordWrite(payload, stats::recordTime);
-                eCnt.control(i);
+            long time;
+            int i = events;
+            while (i > 0) {
+                for (int j = 0; j < Math.min(flushEvents, i); j++) {
+                    time = recordWrite(payload, stats::recordTime);
+                    eCnt.control(i, time);
+                }
+                flush();
+                i -= flushEvents;
             }
-            flush();
         }
     }
 
@@ -115,7 +120,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
                 flush();
-                eCnt.control(i);
+                eCnt.control(i, System.currentTimeMillis());
             }
         }
     }
@@ -129,7 +134,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
             for (int i = 0; (time - startTime) < msToRun; i++) {
                 time = recordWrite(payload, stats::recordTime);
-                eCnt.control(i);
+                if ((flushEvents < Integer.MAX_VALUE) && ((i + 1) % flushEvents == 0)) {
+                    flush();
+                }
+                eCnt.control(i, time);
             }
             flush();
         }
@@ -157,7 +165,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
                 flush();
-                eCnt.control(i);
+                eCnt.control(i, System.currentTimeMillis());
             }
         }
     }
@@ -186,13 +194,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
          * Blocks for small amounts of time to achieve targetThroughput/events per sec
          *
          * @param events current events
+         * @param time   current time
          */
-        private void control(long events) {
+        private void control(long events, long time) {
             if (this.eventsPerSec <= 0) {
                 return;
             }
 
-            float elapsedSec = (System.currentTimeMillis() - startTime) / 1000.f;
+            float elapsedSec = (time - startTime) / 1000.f;
 
             if ((events / elapsedSec) < this.eventsPerSec) {
                 return;

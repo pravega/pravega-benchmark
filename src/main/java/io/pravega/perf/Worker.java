@@ -11,11 +11,12 @@
 package io.pravega.perf;
 
 /**
- *  Abstract class for Writers and Readers.
+ * Abstract class for Writers and Readers.
  */
 public abstract class Worker {
     final int workerID;
     final int events;
+    final int flushEvents;
     final int messageSize;
     final int timeout;
     final String streamName;
@@ -23,11 +24,12 @@ public abstract class Worker {
     final PerfStats stats;
     final int secondsToRun;
 
-    Worker(int sensorId, int events, int secondsToRun,
-           int messageSize, long start, PerfStats stats,
+    Worker(int sensorId, int events, int flushEvents,
+           int secondsToRun, int messageSize, long start, PerfStats stats,
            String streamName, int timeout) {
         this.workerID = sensorId;
         this.events = events;
+        this.flushEvents = flushEvents;
         this.secondsToRun = secondsToRun;
         this.startTime = start;
         this.stats = stats;
