@@ -54,7 +54,8 @@ usage: pravega-benchmark
                                 otherwise, Maximum events per second by
                                 producer(s) and/or Number of events per
                                 consumer
- -flush <arg>                   Number of events/records to flush
+ -flush <arg>                   Number of events/records to flush per
+                                Producer
  -help                          Help message
  -kafka <arg>                   Kafka Benchmarking
  -producers <arg>               Number of producers

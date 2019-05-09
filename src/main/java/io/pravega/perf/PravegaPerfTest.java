@@ -77,7 +77,7 @@ public class PravegaPerfTest {
                         "otherwise, Maximum events per second by producer(s) " +
                         "and/or Number of events per consumer");
         options.addOption("flush", true,
-                "Number of events/records to flush");
+                "Number of events/records to flush per Producer");
         options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
@@ -201,7 +201,6 @@ public class PravegaPerfTest {
         final int consumerCount;
         final int segmentCount;
         final int events;
-        final int flushEvents;
         final int eventsPerSec;
         final int eventsPerProducer;
         final int eventsPerConsumer;
@@ -242,9 +241,14 @@ public class PravegaPerfTest {
             }
 
             if (commandline.hasOption("flush")) {
-                flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
+                int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
+                if (flushEvents > 0) {
+                    flushEventsPerProducer = flushEvents;
+                } else {
+                    flushEventsPerProducer = Integer.MAX_VALUE;
+                }
             } else {
-                flushEvents = Integer.MAX_VALUE;
+                flushEventsPerProducer = Integer.MAX_VALUE;
             }
 
             if (commandline.hasOption("time")) {
@@ -320,17 +324,6 @@ public class PravegaPerfTest {
                     produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
                 }
 
-                if (flushEvents < Integer.MAX_VALUE) {
-                    int perProducer = flushEvents / producerCount;
-                    if (perProducer < 1) {
-                        flushEventsPerProducer = 1;
-                    } else {
-                        flushEventsPerProducer = perProducer;
-                    }
-                } else {
-                    flushEventsPerProducer = Integer.MAX_VALUE;
-                }
-
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
                 if (throughput < 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
@@ -344,7 +337,6 @@ public class PravegaPerfTest {
                 eventsPerProducer = 0;
                 eventsPerSec = 0;
                 writeAndRead = false;
-                flushEventsPerProducer = Integer.MAX_VALUE;
             }
 
             if (consumerCount > 0) {
