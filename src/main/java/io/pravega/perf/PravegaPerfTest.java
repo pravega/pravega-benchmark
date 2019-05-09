@@ -119,7 +119,7 @@ public class PravegaPerfTest {
             final List<WriterWorker> producers = perfTest.getProducers();
             final List<ReaderWorker> consumers = perfTest.getConsumers();
 
-            final List<Callable<Void>> workers = Stream.of(producers, consumers)
+            final List<Callable<Void>> workers = Stream.of(consumers, producers)
                     .filter(x -> x != null)
                     .flatMap(x -> x.stream())
                     .collect(Collectors.toList());
