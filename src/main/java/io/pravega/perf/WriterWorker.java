@@ -131,24 +131,15 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             final long msToRun = secondsToRun * MS_PER_SEC;
             long time = System.currentTimeMillis();
             final EventsController eCnt = new EventsController(time, eventsPerSec);
-
-            if (flushEvents < Integer.MAX_VALUE) {
-                int i = 0;
-                while ((time - startTime) < msToRun) {
+            long msElapsed = time - startTime;
+            while (msElapsed < msToRun) {
+                for (int i = 0; (msElapsed < msToRun) && (i < flushEvents); i++) {
                     time = recordWrite(payload, stats::recordTime);
                     eCnt.control(i, time);
-                    i++;
-                    if ((i % flushEvents) == 0) {
-                        flush();
-                    }
+                    msElapsed = time - startTime;
                 }
-            } else {
-                for (int i = 0; (time - startTime) < msToRun; i++) {
-                    time = recordWrite(payload, stats::recordTime);
-                    eCnt.control(i, time);
-                }
+                flush();
             }
-            flush();
         }
     }
 
