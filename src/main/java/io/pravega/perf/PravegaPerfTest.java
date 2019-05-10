@@ -77,7 +77,8 @@ public class PravegaPerfTest {
                         "otherwise, Maximum events per second by producer(s) " +
                         "and/or Number of events per consumer");
         options.addOption("flush", true,
-                "Number of events/records to flush per Producer");
+                "Number of events/records to flush per Producer;" +
+                        "Not applicable if both producers and consumers are specified");
         options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");

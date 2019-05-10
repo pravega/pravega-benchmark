@@ -55,7 +55,8 @@ usage: pravega-benchmark
                                 producer(s) and/or Number of events per
                                 consumer
  -flush <arg>                   Number of events/records to flush per
-                                Producer
+                                Producer;Not applicable if both producers
+                                and consumers are specified
  -help                          Help message
  -kafka <arg>                   Kafka Benchmarking
  -producers <arg>               Number of producers
