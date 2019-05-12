@@ -17,6 +17,12 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.requests.IsolationLevel;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 
@@ -39,6 +45,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.Properties;
+import java.util.Locale;
 
 /**
  * Performance benchmark for Pravega.
@@ -55,33 +63,36 @@ public class PravegaPerfTest {
         Option opt = null;
         final long startTime = System.currentTimeMillis();
 
-        opt = new Option("controller", true, "controller URI");
+        opt = new Option("controller", true, "Controller URI");
         opt.setRequired(true);
         options.addOption(opt);
         opt = new Option("stream", true, "Stream name");
         opt.setRequired(true);
         options.addOption(opt);
 
-        options.addOption("producers", true, "number of producers");
-        options.addOption("consumers", true, "number of consumers");
+        options.addOption("producers", true, "Number of producers");
+        options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
-                "number of events/records if 'time' not specified;\n" +
-                        "otherwise, maximum events per second by producer(s) " +
-                        "and/or number of events per consumer");
-        options.addOption("time", true, "number of seconds the code runs");
-        options.addOption("transaction", true, "Producers use transactions or not");
+                "Number of events/records if 'time' not specified;\n" +
+                        "otherwise, Maximum events per second by producer(s) " +
+                        "and/or Number of events per consumer");
+        options.addOption("flush", true,
+                "Number of events/records to flush per Producer;" +
+                        "Not applicable if both producers and consumers are specified");
+        options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("recreate", true,
-                "If the stream is already existing, delete it and recreate it");
+                "If the stream is already existing, delete it and recreate it (not applicable for Kafka)");
         options.addOption("throughput", true,
                 "if > 0 , throughput in MB/s\n" +
                         "if 0 , writes 'events'\n" +
                         "if -1, get the maximum throughput");
-        options.addOption("writecsv", true, "csv file to record write latencies");
-        options.addOption("readcsv", true, "csv file to record read latencies");
+        options.addOption("writecsv", true, "CSV file to record write latencies");
+        options.addOption("readcsv", true, "CSV file to record read latencies");
+        options.addOption("kafka", true, "Kafka Benchmarking");
 
         options.addOption("help", false, "Help message");
 
@@ -107,10 +118,10 @@ public class PravegaPerfTest {
         final ForkJoinPool executor = new ForkJoinPool();
 
         try {
-            final List<Callable<Void>> producers = perfTest.getProducers();
-            final List<Callable<Void>> consumers = perfTest.getConsumers();
+            final List<WriterWorker> producers = perfTest.getProducers();
+            final List<ReaderWorker> consumers = perfTest.getConsumers();
 
-            final List<Callable<Void>> workers = Stream.of(producers, consumers)
+            final List<Callable<Void>> workers = Stream.of(consumers, producers)
                     .filter(x -> x != null)
                     .flatMap(x -> x.stream())
                     .collect(Collectors.toList());
@@ -122,6 +133,12 @@ public class PravegaPerfTest {
                         executor.shutdown();
                         executor.awaitTermination(1, TimeUnit.SECONDS);
                         perfTest.shutdown(System.currentTimeMillis());
+                        if (consumers != null) {
+                            consumers.forEach(ReaderWorker::close);
+                        }
+                        if (producers != null) {
+                            producers.forEach(WriterWorker::close);
+                        }
                     } catch (InterruptedException ex) {
                         ex.printStackTrace();
                     }
@@ -132,6 +149,12 @@ public class PravegaPerfTest {
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
             perfTest.shutdown(System.currentTimeMillis());
+            if (consumers != null) {
+                consumers.forEach(ReaderWorker::close);
+            }
+            if (producers != null) {
+                producers.forEach(WriterWorker::close);
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -140,7 +163,17 @@ public class PravegaPerfTest {
 
     public static Test createTest(long startTime, CommandLine commandline, Options options) {
         try {
-            return new PravegaTest(startTime, commandline);
+            boolean runKafka;
+            if (commandline.hasOption("kafka")) {
+                runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
+            } else {
+                runKafka = false;
+            }
+            if (runKafka) {
+                return new KafkaTest(startTime, commandline);
+            } else {
+                return new PravegaTest(startTime, commandline);
+            }
         } catch (IllegalArgumentException ex) {
             ex.printStackTrace();
             final HelpFormatter formatter = new HelpFormatter();
@@ -156,7 +189,7 @@ public class PravegaPerfTest {
     static private abstract class Test {
         static final int MAXTIME = 60 * 60 * 24;
         static final int REPORTINGINTERVAL = 5000;
-        static final int TIMEOUT = 10;
+        static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
         final String controllerUri;
@@ -172,6 +205,7 @@ public class PravegaPerfTest {
         final int eventsPerSec;
         final int eventsPerProducer;
         final int eventsPerConsumer;
+        final int flushEventsPerProducer;
         final int transactionPerCommit;
         final int runtimeSec;
         final double throughput;
@@ -205,6 +239,17 @@ public class PravegaPerfTest {
                 events = Integer.parseInt(commandline.getOptionValue("events"));
             } else {
                 events = 0;
+            }
+
+            if (commandline.hasOption("flush")) {
+                int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
+                if (flushEvents > 0) {
+                    flushEventsPerProducer = flushEvents;
+                } else {
+                    flushEventsPerProducer = Integer.MAX_VALUE;
+                }
+            } else {
+                flushEventsPerProducer = Integer.MAX_VALUE;
             }
 
             if (commandline.hasOption("time")) {
@@ -279,6 +324,7 @@ public class PravegaPerfTest {
                 } else {
                     produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
                 }
+
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
                 if (throughput < 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
@@ -307,11 +353,10 @@ public class PravegaPerfTest {
                 consumeStats = null;
                 eventsPerConsumer = 0;
             }
-
         }
 
-        private void start(long startTime) throws IOException {
-            if (produceStats != null && consumeStats == null) {
+        public void start(long startTime) throws IOException {
+            if (produceStats != null && !writeAndRead) {
                 produceStats.start(startTime);
             }
             if (consumeStats != null) {
@@ -319,9 +364,9 @@ public class PravegaPerfTest {
             }
         }
 
-        private void shutdown(long endTime) {
+        public void shutdown(long endTime) {
             try {
-                if (produceStats != null && consumeStats == null) {
+                if (produceStats != null && !writeAndRead) {
                     produceStats.shutdown(endTime);
                 }
                 if (consumeStats != null) {
@@ -332,15 +377,16 @@ public class PravegaPerfTest {
             }
         }
 
-        public abstract List<Callable<Void>> getProducers();
+        public abstract List<WriterWorker> getProducers();
 
-        public abstract List<Callable<Void>> getConsumers() throws URISyntaxException;
+        public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
 
     }
 
     static private class PravegaTest extends Test {
         final PravegaStreamHandler streamHandle;
         final ClientFactory factory;
+        final ReaderGroup readerGroup;
 
         PravegaTest(long startTime, CommandLine commandline) throws
                 IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
@@ -363,12 +409,17 @@ public class PravegaPerfTest {
                     streamHandle.scale();
                 }
             }
+            if (consumerCount > 0) {
+                readerGroup = streamHandle.createReaderGroup(!writeAndRead);
+            } else {
+                readerGroup = null;
+            }
 
             factory = new ClientFactoryImpl(scopeName, controller);
         }
 
-        public List<Callable<Void>> getProducers() {
-            final List<Callable<Void>> writers;
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
 
             if (producerCount > 0) {
                 if (transactionPerCommit > 0) {
@@ -385,10 +436,9 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
-                                    runtimeSec, false,
-                                    messageSize, startTime,
-                                    produceStats, streamName,
-                                    eventsPerSec, writeAndRead, factory))
+                                    flushEventsPerProducer, runtimeSec, false,
+                                    messageSize, startTime, produceStats,
+                                    streamName, eventsPerSec, writeAndRead, factory))
                             .collect(Collectors.toList());
                 }
             } else {
@@ -398,10 +448,9 @@ public class PravegaPerfTest {
             return writers;
         }
 
-        public List<Callable<Void>> getConsumers() throws URISyntaxException {
-            final List<Callable<Void>> readers;
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
             if (consumerCount > 0) {
-                final ReaderGroup readerGroup = streamHandle.createReaderGroup();
                 readers = IntStream.range(0, consumerCount)
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
@@ -413,5 +462,99 @@ public class PravegaPerfTest {
             }
             return readers;
         }
+
+        @Override
+        public void shutdown(long endTime) {
+            if (readerGroup != null) {
+                readerGroup.close();
+            }
+            super.shutdown(endTime);
+        }
     }
+
+    static private class KafkaTest extends Test {
+        final private Properties producerConfig;
+        final private Properties consumerConfig;
+
+        KafkaTest(long startTime, CommandLine commandline) throws
+                IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
+            super(startTime, commandline);
+            producerConfig = createProducerConfig();
+            consumerConfig = createConsumerConfig();
+        }
+
+        private Properties createProducerConfig() {
+            if (producerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ProducerConfig.ACKS_CONFIG, "all");
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            // Enabling the producer IDEMPOTENCE is must to compare between Kafka and Pravega
+            props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+            return props;
+        }
+
+        private Properties createConsumerConfig() {
+            if (consumerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1);
+            // Enabling the consumer to READ_COMMITTED is must to compare between Kafka and Pravega
+            props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.name().toLowerCase(Locale.ROOT));
+            if (writeAndRead) {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, streamName);
+            } else {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, Long.toString(startTime));
+            }
+            return props;
+        }
+
+
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
+
+            if (producerCount > 0) {
+                if (transactionPerCommit > 0) {
+                    throw new IllegalArgumentException("Kafka Transactions are not supported");
+                } else {
+                    writers = IntStream.range(0, producerCount)
+                            .boxed()
+                            .map(i -> new KafkaWriterWorker(i, eventsPerProducer,
+                                    flushEventsPerProducer, runtimeSec, false,
+                                    messageSize, startTime, produceStats,
+                                    streamName, eventsPerSec, writeAndRead, producerConfig))
+                            .collect(Collectors.toList());
+                }
+            } else {
+                writers = null;
+            }
+            return writers;
+        }
+
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
+            if (consumerCount > 0) {
+                readers = IntStream.range(0, consumerCount)
+                        .boxed()
+                        .map(i -> new KafkaReaderWorker(i, eventsPerConsumer,
+                                runtimeSec, startTime, consumeStats,
+                                streamName, TIMEOUT, writeAndRead, consumerConfig))
+                        .collect(Collectors.toList());
+
+            } else {
+                readers = null;
+            }
+            return readers;
+        }
+    }
+
 }

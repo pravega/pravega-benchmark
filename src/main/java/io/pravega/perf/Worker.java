@@ -11,7 +11,7 @@
 package io.pravega.perf;
 
 /**
- *  Abstract class for Writers and Readers.
+ * Abstract class for Writers and Readers.
  */
 public abstract class Worker {
     final int workerID;
