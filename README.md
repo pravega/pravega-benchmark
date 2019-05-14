@@ -47,29 +47,31 @@ Running Pravega benchmark tool locally:
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
 usage: pravega-benchmark
- -consumers <arg>               number of consumers
- -controller <arg>              controller URI
- -events <arg>                  number of events/records if 'time' not
+ -consumers <arg>               Number of consumers
+ -controller <arg>              Controller URI
+ -events <arg>                  Number of events/records if 'time' not
                                 specified;
-                                otherwise, maximum events per second by
-                                producer(s) and/or number of events per
+                                otherwise, Maximum events per second by
+                                producer(s) and/or Number of events per
                                 consumer
+ -flush <arg>                   Number of events/records to flush per
+                                Producer;Not applicable, if both producers
+                                and consumers are specified
  -help                          Help message
- -producers <arg>               number of producers
- -readcsv <arg>                 csv file to record read latencies
+ -producers <arg>               Number of producers
+ -readcsv <arg>                 CSV file to record read latencies
  -recreate <arg>                If the stream is already existing, delete
-                                it and recreate it
+                                and recreate the same
  -segments <arg>                Number of segments
  -size <arg>                    Size of each message (event or record)
  -stream <arg>                  Stream name
  -throughput <arg>              if > 0 , throughput in MB/s
                                 if 0 , writes 'events'
                                 if -1, get the maximum throughput
- -time <arg>                    number of seconds the code runs
- -transaction <arg>             Producers use transactions or not
+ -time <arg>                    Number of seconds the code runs
  -transactionspercommit <arg>   Number of events before a transaction is
                                 committed
- -writecsv <arg>                csv file to record write latencies
+ -writecsv <arg>                CSV file to record write latencies
 ```
 
 ## Running Performance benchmarking

@@ -55,33 +55,35 @@ public class PravegaPerfTest {
         Option opt = null;
         final long startTime = System.currentTimeMillis();
 
-        opt = new Option("controller", true, "controller URI");
+        opt = new Option("controller", true, "Controller URI");
         opt.setRequired(true);
         options.addOption(opt);
         opt = new Option("stream", true, "Stream name");
         opt.setRequired(true);
         options.addOption(opt);
 
-        options.addOption("producers", true, "number of producers");
-        options.addOption("consumers", true, "number of consumers");
+        options.addOption("producers", true, "Number of producers");
+        options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
-                "number of events/records if 'time' not specified;\n" +
-                        "otherwise, maximum events per second by producer(s) " +
-                        "and/or number of events per consumer");
-        options.addOption("time", true, "number of seconds the code runs");
-        options.addOption("transaction", true, "Producers use transactions or not");
+                "Number of events/records if 'time' not specified;\n" +
+                        "otherwise, Maximum events per second by producer(s) " +
+                        "and/or Number of events per consumer");
+        options.addOption("flush", true,
+                "Number of events/records to flush per Producer;" +
+                        "Not applicable, if both producers and consumers are specified");
+        options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
         options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("recreate", true,
-                "If the stream is already existing, delete it and recreate it");
+                "If the stream is already existing, delete and recreate the same");
         options.addOption("throughput", true,
                 "if > 0 , throughput in MB/s\n" +
                         "if 0 , writes 'events'\n" +
                         "if -1, get the maximum throughput");
-        options.addOption("writecsv", true, "csv file to record write latencies");
-        options.addOption("readcsv", true, "csv file to record read latencies");
+        options.addOption("writecsv", true, "CSV file to record write latencies");
+        options.addOption("readcsv", true, "CSV file to record read latencies");
 
         options.addOption("help", false, "Help message");
 
@@ -110,7 +112,7 @@ public class PravegaPerfTest {
             final List<WriterWorker> producers = perfTest.getProducers();
             final List<ReaderWorker> consumers = perfTest.getConsumers();
 
-            final List<Callable<Void>> workers = Stream.of(producers, consumers)
+            final List<Callable<Void>> workers = Stream.of(consumers, producers)
                     .filter(x -> x != null)
                     .flatMap(x -> x.stream())
                     .collect(Collectors.toList());
@@ -184,6 +186,7 @@ public class PravegaPerfTest {
         final int eventsPerSec;
         final int eventsPerProducer;
         final int eventsPerConsumer;
+        final int flushEventsPerProducer;
         final int transactionPerCommit;
         final int runtimeSec;
         final double throughput;
@@ -217,6 +220,17 @@ public class PravegaPerfTest {
                 events = Integer.parseInt(commandline.getOptionValue("events"));
             } else {
                 events = 0;
+            }
+
+            if (commandline.hasOption("flush")) {
+                int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
+                if (flushEvents > 0) {
+                    flushEventsPerProducer = flushEvents;
+                } else {
+                    flushEventsPerProducer = Integer.MAX_VALUE;
+                }
+            } else {
+                flushEventsPerProducer = Integer.MAX_VALUE;
             }
 
             if (commandline.hasOption("time")) {
@@ -291,6 +305,7 @@ public class PravegaPerfTest {
                 } else {
                     produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
                 }
+
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
                 if (throughput < 0 && runtimeSec > 0) {
                     eventsPerSec = events / producerCount;
@@ -319,7 +334,6 @@ public class PravegaPerfTest {
                 consumeStats = null;
                 eventsPerConsumer = 0;
             }
-
         }
 
         public void start(long startTime) throws IOException {
@@ -403,10 +417,9 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
-                                    runtimeSec, false,
-                                    messageSize, startTime,
-                                    produceStats, streamName,
-                                    eventsPerSec, writeAndRead, factory))
+                                    flushEventsPerProducer, runtimeSec, false,
+                                    messageSize, startTime, produceStats,
+                                    streamName, eventsPerSec, writeAndRead, factory))
                             .collect(Collectors.toList());
                 }
             } else {
