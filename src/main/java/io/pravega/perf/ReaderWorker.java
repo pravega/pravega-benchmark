@@ -20,15 +20,27 @@ import java.util.concurrent.ExecutionException;
 public abstract class ReaderWorker extends Worker implements Callable<Void> {
     final private static int MS_PER_SEC = 1000;
     final private Performance perf;
+    final private boolean writeAndRead;
 
     ReaderWorker(int readerId, int events, int secondsToRun, long start,
-                 PerfStats stats, String readergrp, int timeout, boolean writeAndRead) {
-        super(readerId, events, secondsToRun, 0, start, stats, readergrp, timeout);
+                 PerfStats stats, String readerGrp, int timeout, boolean writeAndRead) {
+        super(readerId, events, secondsToRun, 0, start, stats, readerGrp, timeout);
 
-        perf = secondsToRun > 0 ? (writeAndRead ? new EventsTimeReaderRW() : new EventsTimeReader()) :
-                (writeAndRead ? new EventsReaderRW() : new EventsReader());
+        this.writeAndRead = writeAndRead;
+        this.perf = createBenchmark();
 
     }
+
+    private Performance createBenchmark() {
+        final Performance perfReader;
+        if (secondsToRun > 0) {
+            perfReader = writeAndRead ? this::EventsTimeReaderRW : this::EventsTimeReader;
+        } else {
+            perfReader = writeAndRead ? this::EventsReaderRW : this::EventsReader;
+        }
+        return perfReader;
+    }
+
 
     /**
      * read the data.
@@ -46,84 +58,78 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
         return null;
     }
 
-    private class EventsReader implements Performance {
 
-        public void benchmark() throws IOException {
-            String ret = null;
-            try {
-                int i = 0;
-                while (i < events) {
-                    final long startTime = System.currentTimeMillis();
-                    ret = readData();
-                    if (ret != null) {
-                        stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
-                        i++;
-                    }
+    public void EventsReader() throws IOException {
+        String ret = null;
+        try {
+            int i = 0;
+            while (i < events) {
+                final long startTime = System.currentTimeMillis();
+                ret = readData();
+                if (ret != null) {
+                    stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
+                    i++;
                 }
-            } finally {
-                close();
             }
-        }
-    }
-
-    private class EventsReaderRW implements Performance {
-        public void benchmark() throws IOException {
-            String ret = null;
-            try {
-                int i = 0;
-                while (i < events) {
-                    ret = readData();
-                    if (ret != null) {
-                        final long endTime = System.currentTimeMillis();
-                        final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
-                        stats.recordTime(start, endTime, ret.length());
-                        i++;
-                    }
-                }
-            } finally {
-                close();
-            }
+        } finally {
+            close();
         }
     }
 
 
-    private class EventsTimeReader implements Performance {
-        public void benchmark() throws IOException {
-            final long msToRun = secondsToRun * MS_PER_SEC;
-            String ret = null;
-            long time = System.currentTimeMillis();
-
-            try {
-                while ((time - startTime) < msToRun) {
-                    time = System.currentTimeMillis();
-                    ret = readData();
-                    if (ret != null) {
-                        stats.recordTime(time, System.currentTimeMillis(), ret.length());
-                    }
+    public void EventsReaderRW() throws IOException {
+        String ret = null;
+        try {
+            int i = 0;
+            while (i < events) {
+                ret = readData();
+                if (ret != null) {
+                    final long endTime = System.currentTimeMillis();
+                    final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
+                    stats.recordTime(start, endTime, ret.length());
+                    i++;
                 }
-            } finally {
-                close();
             }
+        } finally {
+            close();
         }
     }
 
-    private class EventsTimeReaderRW implements Performance {
-        public void benchmark() throws IOException {
-            final long msToRun = secondsToRun * MS_PER_SEC;
-            String ret = null;
-            long time = System.currentTimeMillis();
-            try {
-                while ((time - startTime) < msToRun) {
-                    ret = readData();
-                    time = System.currentTimeMillis();
-                    if (ret != null) {
-                        final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
-                        stats.recordTime(startTime, time, ret.length());
-                    }
+
+    public void EventsTimeReader() throws IOException {
+        final long msToRun = secondsToRun * MS_PER_SEC;
+        String ret = null;
+        long time = System.currentTimeMillis();
+
+        try {
+            while ((time - startTime) < msToRun) {
+                time = System.currentTimeMillis();
+                ret = readData();
+                if (ret != null) {
+                    stats.recordTime(time, System.currentTimeMillis(), ret.length());
                 }
-            } finally {
-                close();
             }
+        } finally {
+            close();
+        }
+    }
+
+
+    public void EventsTimeReaderRW() throws IOException {
+        final long msToRun = secondsToRun * MS_PER_SEC;
+        String ret = null;
+        long time = System.currentTimeMillis();
+        try {
+            while ((time - startTime) < msToRun) {
+                ret = readData();
+                time = System.currentTimeMillis();
+                if (ret != null) {
+                    final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
+                    stats.recordTime(startTime, time, ret.length());
+                }
+            }
+        } finally {
+            close();
         }
     }
 }

@@ -54,9 +54,10 @@ usage: pravega-benchmark
                                 otherwise, Maximum events per second by
                                 producer(s) and/or Number of events per
                                 consumer
- -flush <arg>                   Number of events/records to flush per
-                                Producer;Not applicable, if both producers
-                                and consumers are specified
+ -flush <arg>                   Each producer calls flush after writing
+                                <arg> number of of events/records; Not
+                                applicable, if both producers and
+                                consumers are specified
  -help                          Help message
  -producers <arg>               Number of producers
  -readcsv <arg>                 CSV file to record read latencies
