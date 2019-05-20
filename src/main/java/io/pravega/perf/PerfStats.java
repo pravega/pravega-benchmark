@@ -80,9 +80,12 @@ public class PerfStats {
      * Private class for start and end time.
      */
     final private class QueueProcessor implements Callable {
-        final private static int IDLE_COUNT = 1000;
         final private static int NS_PER_MICRO = 1000;
+        final private static int MICROS_PER_MS = 1000;
+        final private static int MINIMUM_WAIT_MS = 100;
+        final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
         final private static int PARK_NS = NS_PER_MICRO;
+        final private static long IDLE_COUNT = (NS_PER_MS / PARK_NS) * MINIMUM_WAIT_MS;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -95,7 +98,7 @@ public class PerfStats {
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
             boolean doWork = true;
             long time = startTime;
-            int idleCount = 0;
+            long idleCount = 0;
             TimeStamp t;
 
             while (doWork) {
