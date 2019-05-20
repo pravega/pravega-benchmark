@@ -80,7 +80,9 @@ public class PerfStats {
      * Private class for start and end time.
      */
     final private class QueueProcessor implements Callable {
-        final private static int PARK_NS = 1000;
+        final private static int IDLE_COUNT = 1000;
+        final private static int NS_PER_MICRO = 1000;
+        final private static int PARK_NS = NS_PER_MICRO;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -93,6 +95,7 @@ public class PerfStats {
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
             boolean doWork = true;
             long time = startTime;
+            int idleCount = 0;
             TimeStamp t;
 
             while (doWork) {
@@ -108,7 +111,11 @@ public class PerfStats {
                     time = t.endTime;
                 } else {
                     LockSupport.parkNanos(PARK_NS);
-                    time = System.currentTimeMillis();
+                    idleCount++;
+                    if (idleCount > IDLE_COUNT) {
+                        time = System.currentTimeMillis();
+                        idleCount = 0;
+                    }
                 }
                 if (window.windowTimeMS(time) > windowInterval) {
                     window.print(time);
