@@ -94,7 +94,7 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            final int minWaitTimeMS = windowInterval / 5;
+            final int minWaitTimeMS = windowInterval / 50;
             final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
