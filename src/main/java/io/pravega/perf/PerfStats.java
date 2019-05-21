@@ -82,10 +82,8 @@ public class PerfStats {
     final private class QueueProcessor implements Callable {
         final private static int NS_PER_MICRO = 1000;
         final private static int MICROS_PER_MS = 1000;
-        final private static int MINIMUM_WAIT_MS = 100;
         final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
         final private static int PARK_NS = NS_PER_MICRO;
-        final private static long IDLE_COUNT = (NS_PER_MS / PARK_NS) * MINIMUM_WAIT_MS;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -96,6 +94,8 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
+            final int minWaitTimeMS = windowInterval / 5;
+            final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
             long idleCount = 0;
@@ -112,17 +112,21 @@ public class PerfStats {
                         latencyRecorder.record(t.startTime, t.bytes, latency);
                     }
                     time = t.endTime;
+                    if (window.windowTimeMS(time) > windowInterval) {
+                        window.print(time);
+                        window.reset(time);
+                    }
                 } else {
                     LockSupport.parkNanos(PARK_NS);
                     idleCount++;
-                    if (idleCount > IDLE_COUNT) {
+                    if (idleCount > totalIdleCount) {
                         time = System.currentTimeMillis();
                         idleCount = 0;
+                        if (window.windowTimeMS(time) > windowInterval) {
+                            window.print(time);
+                            window.reset(time);
+                        }
                     }
-                }
-                if (window.windowTimeMS(time) > windowInterval) {
-                    window.print(time);
-                    window.reset(time);
                 }
             }
             latencyRecorder.printTotal(time);
