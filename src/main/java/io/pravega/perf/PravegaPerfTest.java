@@ -55,13 +55,8 @@ public class PravegaPerfTest {
         Option opt = null;
         final long startTime = System.currentTimeMillis();
 
-        opt = new Option("controller", true, "Controller URI");
-        opt.setRequired(true);
-        options.addOption(opt);
-        opt = new Option("stream", true, "Stream name");
-        opt.setRequired(true);
-        options.addOption(opt);
-
+        options.addOption("controller", true, "Controller URI");
+        options.addOption("stream", true, "Stream name");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
@@ -289,6 +284,15 @@ public class PravegaPerfTest {
             }
 
             scopeName = SCOPE;
+
+            if (controllerUri == null) {
+                throw new IllegalArgumentException("Error: Must specify Controller IP address");
+            }
+
+            if (streamName == null) {
+                throw new IllegalArgumentException("Error: Must specify stream Name");
+            }
+
             if (producerCount == 0 && consumerCount == 0) {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
             }
