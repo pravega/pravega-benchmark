@@ -13,8 +13,5 @@ package io.pravega.perf;
 import java.io.IOException;
 
 public interface Performance {
-    int TIME_HEADER_SIZE = 14;
-    String TIME_HEADER_FORMAT = "%0" + TIME_HEADER_SIZE + "d";
-
-    void benchmark() throws InterruptedException, IOException;
+     void benchmark() throws InterruptedException, IOException;
 }

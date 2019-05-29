@@ -11,9 +11,12 @@
 package io.pravega.perf;
 
 /**
- *  Abstract class for Writers and Readers.
+ * Abstract class for Writers and Readers.
  */
 public abstract class Worker {
+    final static int TIME_HEADER_SIZE = 14;
+    final static String TIME_HEADER_FORMAT = "%0" + TIME_HEADER_SIZE + "d";
+
     final int workerID;
     final int events;
     final int messageSize;

@@ -36,7 +36,7 @@ import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
 
 /**
- *  Class for Pravega stream and segments.
+ * Class for Pravega stream and segments.
  */
 public class PravegaStreamHandler {
     final String scope;
@@ -134,14 +134,16 @@ public class PravegaStreamHandler {
         }
     }
 
-    ReaderGroup createReaderGroup() throws URISyntaxException {
-        ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
-                ClientConfig.builder()
-                        .controllerURI(new URI(controllerUri)).build());
-        readerGroupManager.createReaderGroup(stream,
-                ReaderGroupConfig.builder()
-                        .stream(Stream.of(scope, stream))
-                        .build());
-        return readerGroupManager.getReaderGroup(stream);
+    ReaderGroup createReaderGroup(boolean reset) throws URISyntaxException {
+        final ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
+                ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
+        final ReaderGroupConfig rdGrpConfig = ReaderGroupConfig.builder()
+                            .stream(Stream.of(scope, stream)).build();
+        readerGroupManager.createReaderGroup(stream, rdGrpConfig);
+        final ReaderGroup rdGroup = readerGroupManager.getReaderGroup(stream);
+        if (reset) {
+            rdGroup.resetReaderGroup(rdGrpConfig);
+        }
+        return rdGroup;
     }
 }

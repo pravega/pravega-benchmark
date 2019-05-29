@@ -25,18 +25,19 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private Performance perf;
     final private String payload;
     final private int eventsPerSec;
+    final private int EventsPerFlush;
+    final private boolean writeAndRead;
 
-    WriterWorker(int sensorId, int events, int secondsToRun,
+    WriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
                  PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
-        super(sensorId, events, secondsToRun,
-                messageSize, start, stats,
-                streamName, 0);
+        super(sensorId, events, secondsToRun, messageSize, start, stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
-        perf = secondsToRun > 0 ? (writeAndRead ? new EventsWriterTimeRW() : new EventsWriterTime()) :
-                (writeAndRead ? new EventsWriterRW() : new EventsWriter());
-        payload = createPayload(messageSize);
+        this.EventsPerFlush = EventsPerFlush;
+        this.writeAndRead = writeAndRead;
+        this.payload = createPayload(messageSize);
+        this.perf = createBenchmark();
     }
 
 
@@ -50,8 +51,35 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
 
+    private Performance createBenchmark() {
+        final Performance perfWriter;
+        if (secondsToRun > 0) {
+            if (writeAndRead) {
+                perfWriter = this::EventsWriterTimeRW;
+            } else {
+                if (eventsPerSec > 0 || EventsPerFlush < Integer.MAX_VALUE) {
+                    perfWriter = this::EventsWriterTimeSleep;
+                } else {
+                    perfWriter = this::EventsWriterTime;
+                }
+            }
+        } else {
+            if (writeAndRead) {
+                perfWriter = this::EventsWriterRW;
+            } else {
+                if (eventsPerSec > 0 || EventsPerFlush < Integer.MAX_VALUE) {
+                    perfWriter = this::EventsWriterSleep;
+                } else {
+                    perfWriter = this::EventsWriter;
+                }
+            }
+        }
+        return perfWriter;
+    }
+
+
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data   data to write
      * @param record to call for benchmarking
@@ -60,7 +88,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract long recordWrite(String data, TriConsumer record);
 
     /**
-     * Writes the data and benchmark
+     * Writes the data and benchmark.
      *
      * @param data data to write
      */
@@ -71,79 +99,117 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      */
     public abstract void flush();
 
+    /**
+     * Flush the producer data.
+     */
+    public abstract void close();
+
+
     @Override
     public Void call() throws InterruptedException, ExecutionException, IOException {
         perf.benchmark();
         return null;
     }
 
-    private class EventsWriter implements Performance {
 
-        public void benchmark() throws InterruptedException, IOException {
-            final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
-            for (int i = 0; i < events; i++) {
-                recordWrite(payload, stats::recordTime);
-                eCnt.control(i);
+    private void EventsWriter() throws InterruptedException, IOException {
+        for (int i = 0; i < events; i++) {
+            recordWrite(payload, stats::recordTime);
+        }
+        flush();
+    }
+
+
+    private void EventsWriterSleep() throws InterruptedException, IOException {
+        final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
+        int cnt = 0;
+        while (cnt < events) {
+            int loopMax = Math.min(EventsPerFlush, events - cnt);
+            for (int i = 0; i < loopMax; i++) {
+                eCnt.control(cnt++, recordWrite(payload, stats::recordTime));
             }
             flush();
         }
     }
 
-    private class EventsWriterRW implements Performance {
 
-        public void benchmark() throws InterruptedException, IOException {
-            final long time = System.currentTimeMillis();
-            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
-            final EventsController eCnt = new EventsController(time, eventsPerSec);
-            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
-            buffer.setLength(messageSize);
-            for (int i = 0; i < events; i++) {
-                final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
-                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
-                writeData(data);
-                eCnt.control(i);
-            }
-            flush();
+    private void EventsWriterTime() throws InterruptedException, IOException {
+        final long msToRun = secondsToRun * MS_PER_SEC;
+        long time = System.currentTimeMillis();
+        while ((time - startTime) < msToRun) {
+            time = recordWrite(payload, stats::recordTime);
         }
+        flush();
     }
 
-    private class EventsWriterTime implements Performance {
 
-        public void benchmark() throws InterruptedException, IOException {
-            final long msToRun = secondsToRun * MS_PER_SEC;
-            long time = System.currentTimeMillis();
-            final EventsController eCnt = new EventsController(time, eventsPerSec);
-
-            for (int i = 0; (time - startTime) < msToRun; i++) {
+    private void EventsWriterTimeSleep() throws InterruptedException, IOException {
+        final long msToRun = secondsToRun * MS_PER_SEC;
+        long time = System.currentTimeMillis();
+        final EventsController eCnt = new EventsController(time, eventsPerSec);
+        long msElapsed = time - startTime;
+        int cnt = 0;
+        while (msElapsed < msToRun) {
+            for (int i = 0; (msElapsed < msToRun) && (i < EventsPerFlush); i++) {
                 time = recordWrite(payload, stats::recordTime);
-                eCnt.control(i);
+                eCnt.control(cnt++, time);
+                msElapsed = time - startTime;
             }
             flush();
         }
     }
 
-    private class EventsWriterTimeRW implements Performance {
 
-        public void benchmark() throws InterruptedException, IOException {
-            final long msToRun = secondsToRun * MS_PER_SEC;
-            long time = System.currentTimeMillis();
-            final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
-            final EventsController eCnt = new EventsController(time, eventsPerSec);
-            final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
-            buffer.setLength(messageSize);
-            for (int i = 0; (time - startTime) < msToRun; i++) {
-                time = System.currentTimeMillis();
-                final String header = String.format(TIME_HEADER_FORMAT, time);
-                final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
-                writeData(data);
-                eCnt.control(i);
-            }
+    private void EventsWriterRW() throws InterruptedException, IOException {
+        final long time = System.currentTimeMillis();
+        final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
+        final EventsController eCnt = new EventsController(time, eventsPerSec);
+        final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
+        buffer.setLength(messageSize);
+        for (int i = 0; i < events; i++) {
+            final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
+            final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
+            writeData(data);
+                /*
+                flush is required here for following reasons:
+                1. The writeData is called for End to End latency mode; hence make sure that data is sent.
+                2. In case of kafka benchmarking, the buffering makes too many writes;
+                   flushing moderates the kafka producer.
+                3. If the flush called after several iterations, then flush may take too much of time.
+                */
             flush();
+            eCnt.control(i);
         }
     }
+
+
+    private void EventsWriterTimeRW() throws InterruptedException, IOException {
+        final long msToRun = secondsToRun * MS_PER_SEC;
+        long time = System.currentTimeMillis();
+        final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
+        final EventsController eCnt = new EventsController(time, eventsPerSec);
+        final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
+        buffer.setLength(messageSize);
+        for (int i = 0; (time - startTime) < msToRun; i++) {
+            time = System.currentTimeMillis();
+            final String header = String.format(TIME_HEADER_FORMAT, time);
+            final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
+            writeData(data);
+                /*
+                flush is required here for following reasons:
+                1. The writeData is called for End to End latency mode; hence make sure that data is sent.
+                2. In case of kafka benchmarking, the buffering makes too many writes;
+                   flushing moderates the kafka producer.
+                3. If the flush called after several iterations, then flush may take too much of time.
+                */
+            flush();
+            eCnt.control(i);
+        }
+    }
+
 
     @NotThreadSafe
-    static private class EventsController {
+    final static private class EventsController {
         private static final long NS_PER_MS = 1000000L;
         private static final long NS_PER_SEC = 1000 * NS_PER_MS;
         private static final long MIN_SLEEP_NS = 2 * NS_PER_MS;
@@ -167,12 +233,28 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
          *
          * @param events current events
          */
-        private void control(long events) {
+        void control(long events) {
             if (this.eventsPerSec <= 0) {
                 return;
             }
+            needSleep(events, System.currentTimeMillis());
+        }
 
-            float elapsedSec = (System.currentTimeMillis() - startTime) / 1000.f;
+        /**
+         * Blocks for small amounts of time to achieve targetThroughput/events per sec
+         *
+         * @param events current events
+         * @param time   current time
+         */
+        void control(long events, long time) {
+            if (this.eventsPerSec <= 0) {
+                return;
+            }
+            needSleep(events, time);
+        }
+
+        private void needSleep(long events, long time) {
+            float elapsedSec = (time - startTime) / 1000.f;
 
             if ((events / elapsedSec) < this.eventsPerSec) {
                 return;

@@ -23,13 +23,13 @@ import io.pravega.client.stream.EventWriterConfig;
 public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<String> producer;
 
-    PravegaWriterWorker(int sensorId, int events, int secondsToRun,
+    PravegaWriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
                         boolean writeAndRead, ClientFactory factory) {
 
-        super(sensorId, events, secondsToRun,
-                isRandomKey, messageSize, start,
+        super(sensorId, events, EventsPerFlush,
+                secondsToRun, isRandomKey, messageSize, start,
                 stats, streamName, eventsPerSec, writeAndRead);
 
         this.producer = factory.createEventWriter(streamName,
@@ -56,5 +56,10 @@ public class PravegaWriterWorker extends WriterWorker {
     @Override
     public void flush() {
         producer.flush();
+    }
+
+    @Override
+    public synchronized void close() {
+        producer.close();
     }
 }
