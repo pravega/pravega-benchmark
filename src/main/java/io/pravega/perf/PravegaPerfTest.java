@@ -181,7 +181,7 @@ public class PravegaPerfTest {
         final int eventsPerSec;
         final int eventsPerProducer;
         final int eventsPerConsumer;
-        final int flushEventsPerProducer;
+        final int EventsPerFlush;
         final int transactionPerCommit;
         final int runtimeSec;
         final double throughput;
@@ -220,12 +220,12 @@ public class PravegaPerfTest {
             if (commandline.hasOption("flush")) {
                 int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
                 if (flushEvents > 0) {
-                    flushEventsPerProducer = flushEvents;
+                    EventsPerFlush = flushEvents;
                 } else {
-                    flushEventsPerProducer = Integer.MAX_VALUE;
+                    EventsPerFlush = Integer.MAX_VALUE;
                 }
             } else {
-                flushEventsPerProducer = Integer.MAX_VALUE;
+                EventsPerFlush = Integer.MAX_VALUE;
             }
 
             if (commandline.hasOption("time")) {
@@ -421,7 +421,7 @@ public class PravegaPerfTest {
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
-                                    flushEventsPerProducer, runtimeSec, false,
+                                    EventsPerFlush, runtimeSec, false,
                                     messageSize, startTime, produceStats,
                                     streamName, eventsPerSec, writeAndRead, factory))
                             .collect(Collectors.toList());

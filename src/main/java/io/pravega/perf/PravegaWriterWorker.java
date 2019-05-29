@@ -23,12 +23,12 @@ import io.pravega.client.stream.EventWriterConfig;
 public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<String> producer;
 
-    PravegaWriterWorker(int sensorId, int events, int flushEvents, int secondsToRun,
+    PravegaWriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
                         boolean writeAndRead, ClientFactory factory) {
 
-        super(sensorId, events, flushEvents,
+        super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
                 stats, streamName, eventsPerSec, writeAndRead);
 

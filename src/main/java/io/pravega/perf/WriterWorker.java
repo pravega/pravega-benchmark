@@ -25,16 +25,16 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private Performance perf;
     final private String payload;
     final private int eventsPerSec;
-    final private int flushEvents;
+    final private int EventsPerFlush;
     final private boolean writeAndRead;
 
-    WriterWorker(int sensorId, int events, int flushEvents, int secondsToRun,
+    WriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
                  PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
 
         super(sensorId, events, secondsToRun, messageSize, start, stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
-        this.flushEvents = flushEvents;
+        this.EventsPerFlush = EventsPerFlush;
         this.writeAndRead = writeAndRead;
         this.payload = createPayload(messageSize);
         this.perf = createBenchmark();
@@ -57,7 +57,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             if (writeAndRead) {
                 perfWriter = this::EventsWriterTimeRW;
             } else {
-                if (eventsPerSec > 0 || flushEvents < Integer.MAX_VALUE) {
+                if (eventsPerSec > 0 || EventsPerFlush < Integer.MAX_VALUE) {
                     perfWriter = this::EventsWriterTimeSleep;
                 } else {
                     perfWriter = this::EventsWriterTime;
@@ -67,7 +67,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
             if (writeAndRead) {
                 perfWriter = this::EventsWriterRW;
             } else {
-                if (eventsPerSec > 0 || flushEvents < Integer.MAX_VALUE) {
+                if (eventsPerSec > 0 || EventsPerFlush < Integer.MAX_VALUE) {
                     perfWriter = this::EventsWriterSleep;
                 } else {
                     perfWriter = this::EventsWriter;
@@ -124,7 +124,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
         int cnt = 0;
         while (cnt < events) {
-            int loopMax = Math.min(flushEvents, events - cnt);
+            int loopMax = Math.min(EventsPerFlush, events - cnt);
             for (int i = 0; i < loopMax; i++) {
                 eCnt.control(cnt++, recordWrite(payload, stats::recordTime));
             }
@@ -150,7 +150,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         long msElapsed = time - startTime;
         int cnt = 0;
         while (msElapsed < msToRun) {
-            for (int i = 0; (msElapsed < msToRun) && (i < flushEvents); i++) {
+            for (int i = 0; (msElapsed < msToRun) && (i < EventsPerFlush); i++) {
                 time = recordWrite(payload, stats::recordTime);
                 eCnt.control(cnt++, time);
                 msElapsed = time - startTime;
