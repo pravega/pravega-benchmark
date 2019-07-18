@@ -125,6 +125,7 @@ public class PravegaPerfTest {
                         if (producers != null) {
                             producers.forEach(WriterWorker::close);
                         }
+                        perfTest.closeReaderGroup();
                     } catch (InterruptedException ex) {
                         ex.printStackTrace();
                     }
@@ -141,6 +142,7 @@ public class PravegaPerfTest {
             if (producers != null) {
                 producers.forEach(WriterWorker::close);
             }
+            perfTest.closeReaderGroup();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -171,6 +173,7 @@ public class PravegaPerfTest {
         final String controllerUri;
         final int messageSize;
         final String streamName;
+        final String rdGrpName;
         final String scopeName;
         final boolean recreate;
         final boolean writeAndRead;
@@ -283,8 +286,6 @@ public class PravegaPerfTest {
                 readFile = null;
             }
 
-            scopeName = SCOPE;
-
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
             }
@@ -295,6 +296,12 @@ public class PravegaPerfTest {
 
             if (producerCount == 0 && consumerCount == 0) {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
+            }
+            scopeName = SCOPE;
+            if (recreate) {
+                rdGrpName = streamName + startTime;
+            } else {
+                rdGrpName = streamName;
             }
 
             if (producerCount > 0) {
@@ -362,6 +369,8 @@ public class PravegaPerfTest {
             }
         }
 
+        public abstract void closeReaderGroup();
+
         public abstract List<WriterWorker> getProducers();
 
         public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
@@ -383,7 +392,7 @@ public class PravegaPerfTest {
                     .maxBackoffMillis(5000).build(),
                     bgExecutor);
 
-            streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
+            streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri,
                     segmentCount, TIMEOUT, controller,
                     bgExecutor);
 
@@ -440,7 +449,7 @@ public class PravegaPerfTest {
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
                                 runtimeSec, startTime, consumeStats,
-                                streamName, TIMEOUT, writeAndRead, factory))
+                                rdGrpName, TIMEOUT, writeAndRead, factory))
                         .collect(Collectors.toList());
             } else {
                 readers = null;
@@ -449,11 +458,11 @@ public class PravegaPerfTest {
         }
 
         @Override
-        public void shutdown(long endTime) {
-            if (readerGroup != null) {
+        public void closeReaderGroup(){
+            if (readerGroup != null){
                 readerGroup.close();
             }
-            super.shutdown(endTime);
         }
+
     }
 }
