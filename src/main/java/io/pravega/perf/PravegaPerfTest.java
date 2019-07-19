@@ -56,6 +56,7 @@ public class PravegaPerfTest {
         final long startTime = System.currentTimeMillis();
 
         options.addOption("controller", true, "Controller URI");
+        options.addOption("scope", true, "Scope name");
         options.addOption("stream", true, "Stream name");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
@@ -251,6 +252,12 @@ public class PravegaPerfTest {
                 streamName = null;
             }
 
+            if (commandline.hasOption("scope")) {
+                scopeName = commandline.getOptionValue("scope");
+            } else {
+                scopeName = SCOPE;
+            }
+
             if (commandline.hasOption("transactionspercommit")) {
                 transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
             } else {
@@ -297,7 +304,7 @@ public class PravegaPerfTest {
             if (producerCount == 0 && consumerCount == 0) {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
             }
-            scopeName = SCOPE;
+
             if (recreate) {
                 rdGrpName = streamName + startTime;
             } else {

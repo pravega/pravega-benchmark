@@ -63,6 +63,7 @@ usage: pravega-benchmark
  -readcsv <arg>                 CSV file to record read latencies
  -recreate <arg>                If the stream is already existing, delete
                                 and recreate the same
+ -scope <arg>                   Scope name
  -segments <arg>                Number of segments
  -size <arg>                    Size of each message (event or record)
  -stream <arg>                  Stream name
