@@ -465,8 +465,8 @@ public class PravegaPerfTest {
         }
 
         @Override
-        public void closeReaderGroup(){
-            if (readerGroup != null){
+        public void closeReaderGroup() {
+            if (readerGroup != null) {
                 readerGroup.close();
             }
         }
