@@ -11,6 +11,8 @@
 package io.pravega.perf;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -45,7 +47,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     /**
      * read the data.
      */
-    public abstract String readData();
+    public abstract byte[] readData();
 
     /**
      * close the consumer/reader.
@@ -54,20 +56,25 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
     @Override
     public Void call() throws InterruptedException, ExecutionException, IOException {
-        perf.benchmark();
+        try {
+            perf.benchmark();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        }
         return null;
     }
 
 
     public void EventsReader() throws IOException {
-        String ret = null;
+        byte[] ret = null;
         try {
             int i = 0;
             while (i < events) {
                 final long startTime = System.currentTimeMillis();
                 ret = readData();
                 if (ret != null) {
-                    stats.recordTime(startTime, System.currentTimeMillis(), ret.length());
+                    stats.recordTime(startTime, System.currentTimeMillis(), ret.length);
                     i++;
                 }
             }
@@ -78,15 +85,18 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
 
     public void EventsReaderRW() throws IOException {
-        String ret = null;
+        final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
+        byte[] ret = null;
         try {
             int i = 0;
             while (i < events) {
                 ret = readData();
                 if (ret != null) {
                     final long endTime = System.currentTimeMillis();
-                    final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
-                    stats.recordTime(start, endTime, ret.length());
+                    timeBuffer.clear();
+                    timeBuffer.put(ret, 0, TIME_HEADER_SIZE);
+                    final long start = timeBuffer.getLong(0);
+                    stats.recordTime(start, endTime, ret.length);
                     i++;
                 }
             }
@@ -98,7 +108,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
     public void EventsTimeReader() throws IOException {
         final long msToRun = secondsToRun * MS_PER_SEC;
-        String ret = null;
+        byte[] ret = null;
         long time = System.currentTimeMillis();
 
         try {
@@ -106,7 +116,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                 time = System.currentTimeMillis();
                 ret = readData();
                 if (ret != null) {
-                    stats.recordTime(time, System.currentTimeMillis(), ret.length());
+                    stats.recordTime(time, System.currentTimeMillis(), ret.length);
                 }
             }
         } finally {
@@ -117,15 +127,18 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
 
     public void EventsTimeReaderRW() throws IOException {
         final long msToRun = secondsToRun * MS_PER_SEC;
-        String ret = null;
+        final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
+        byte[] ret = null;
         long time = System.currentTimeMillis();
         try {
             while ((time - startTime) < msToRun) {
                 ret = readData();
                 time = System.currentTimeMillis();
                 if (ret != null) {
-                    final long start = Long.parseLong(ret.substring(0, TIME_HEADER_SIZE));
-                    stats.recordTime(startTime, time, ret.length());
+                    timeBuffer.clear();
+                    timeBuffer.put(ret, 0, TIME_HEADER_SIZE);
+                    final long start = timeBuffer.getLong(0);
+                    stats.recordTime(start, time, ret.length);
                 }
             }
         } finally {

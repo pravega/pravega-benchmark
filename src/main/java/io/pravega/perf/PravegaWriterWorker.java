@@ -14,14 +14,14 @@ import java.util.concurrent.CompletableFuture;
 
 import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
-import io.pravega.client.stream.impl.UTF8StringSerializer;
+import io.pravega.client.stream.impl.ByteArraySerializer;
 import io.pravega.client.stream.EventWriterConfig;
 
 /**
  * Class for Pravega writer/producer.
  */
 public class PravegaWriterWorker extends WriterWorker {
-    final EventStreamWriter<String> producer;
+    final EventStreamWriter<byte[]> producer;
 
     PravegaWriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
@@ -33,23 +33,23 @@ public class PravegaWriterWorker extends WriterWorker {
                 stats, streamName, eventsPerSec, writeAndRead);
 
         this.producer = factory.createEventWriter(streamName,
-                new UTF8StringSerializer(),
+                new ByteArraySerializer(),
                 EventWriterConfig.builder().build());
     }
 
     @Override
-    public long recordWrite(String data, TriConsumer record) {
+    public long recordWrite(byte[] data, TriConsumer record) {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
         ret = producer.writeEvent(data);
         ret.thenAccept(d -> {
-            record.accept(time, System.currentTimeMillis(), data.length());
+            record.accept(time, System.currentTimeMillis(), data.length);
         });
         return time;
     }
 
     @Override
-    public void writeData(String data) {
+    public void writeData(byte[] data) {
         producer.writeEvent(data);
     }
 
