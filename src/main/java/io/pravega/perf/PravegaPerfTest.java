@@ -308,7 +308,7 @@ public class PravegaPerfTest {
             if (recreate) {
                 rdGrpName = streamName + startTime;
             } else {
-                rdGrpName = streamName;
+                rdGrpName = streamName + "RdGrp";
             }
 
             if (producerCount > 0) {
