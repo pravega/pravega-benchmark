@@ -34,7 +34,6 @@ import io.pravega.client.segment.impl.Segment;
 import io.pravega.client.stream.impl.StreamImpl;
 import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
-import io.pravega.client.stream.InvalidStreamException;
 
 /**
  * Class for Pravega stream and segments.
@@ -158,8 +157,8 @@ public class PravegaStreamHandler {
     void deleteReaderGroup() {
         try {
             readerGroupManager.deleteReaderGroup(rdGrpName);
-        } catch (InvalidStreamException e) {
-            System.out.println("Reader Group is already deleted");
+        } catch (RuntimeException e) {
+            System.out.println("Cannot delete reader group " + rdGrpName + " because it is already deleted");
         }
     }
 }
