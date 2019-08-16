@@ -12,7 +12,7 @@ package io.pravega.perf;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -23,7 +23,7 @@ import java.util.concurrent.ExecutionException;
 public abstract class WriterWorker extends Worker implements Callable<Void> {
     final private static int MS_PER_SEC = 1000;
     final private Performance perf;
-    final private String payload;
+    final private byte[] payload;
     final private int eventsPerSec;
     final private int EventsPerFlush;
     final private boolean writeAndRead;
@@ -41,13 +41,13 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     }
 
 
-    private String createPayload(int size) {
+    private byte[] createPayload(int size) {
         Random random = new Random();
         byte[] bytes = new byte[size];
         for (int i = 0; i < size; ++i) {
             bytes[i] = (byte) (random.nextInt(26) + 65);
         }
-        return new String(bytes, StandardCharsets.US_ASCII);
+        return bytes;
     }
 
 
@@ -85,14 +85,14 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
      * @param record to call for benchmarking
      * @return time return the data sent time
      */
-    public abstract long recordWrite(String data, TriConsumer record);
+    public abstract long recordWrite(byte[] data, TriConsumer record);
 
     /**
      * Writes the data and benchmark.
      *
      * @param data data to write
      */
-    public abstract void writeData(String data);
+    public abstract void writeData(byte[] data);
 
     /**
      * Flush the producer data.
@@ -107,7 +107,12 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     @Override
     public Void call() throws InterruptedException, ExecutionException, IOException {
-        perf.benchmark();
+        try {
+            perf.benchmark();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        }
         return null;
     }
 
@@ -161,15 +166,13 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterRW() throws InterruptedException, IOException {
+        final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
         final long time = System.currentTimeMillis();
-        final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
         final EventsController eCnt = new EventsController(time, eventsPerSec);
-        final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
-        buffer.setLength(messageSize);
         for (int i = 0; i < events; i++) {
-            final String header = String.format(TIME_HEADER_FORMAT, System.currentTimeMillis());
-            final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
-            writeData(data);
+            byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
+            System.arraycopy(bytes, 0, payload, 0, bytes.length);
+            writeData(payload);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.
@@ -185,16 +188,15 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
     private void EventsWriterTimeRW() throws InterruptedException, IOException {
         final long msToRun = secondsToRun * MS_PER_SEC;
+        final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
         long time = System.currentTimeMillis();
-        final String timeHeader = String.format(TIME_HEADER_FORMAT, time);
         final EventsController eCnt = new EventsController(time, eventsPerSec);
-        final StringBuilder buffer = new StringBuilder(timeHeader + ", " + workerID + ", " + payload);
-        buffer.setLength(messageSize);
+
         for (int i = 0; (time - startTime) < msToRun; i++) {
             time = System.currentTimeMillis();
-            final String header = String.format(TIME_HEADER_FORMAT, time);
-            final String data = buffer.replace(0, TIME_HEADER_SIZE, header).toString();
-            writeData(data);
+            byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
+            System.arraycopy(bytes, 0, payload, 0, bytes.length);
+            writeData(payload);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.

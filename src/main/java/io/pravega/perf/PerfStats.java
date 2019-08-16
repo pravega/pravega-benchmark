@@ -212,19 +212,7 @@ public class PerfStats {
         long totalLatency;
         long maxLatency;
         long totalBytes;
-        ArrayList<LatencyRange> latencyRanges;
-
-        private class LatencyRange {
-            private final int latency;
-            private final int start;
-            private final int end;
-
-            private LatencyRange(int latency, int start, int end) {
-                this.latency = latency;
-                this.start = start;
-                this.end = end;
-            }
-        }
+        ArrayList<int[]> latencyRanges;
 
         LatencyWriter(String action, int messageSize, long startTime) {
             this.action = action;
@@ -242,7 +230,7 @@ public class PerfStats {
             latencyRanges = new ArrayList<>();
             for (int i = 0, cur = 0; i < latencies.length; i++) {
                 if (latencies[i] > 0) {
-                    latencyRanges.add(new LatencyRange(i, cur, cur + latencies[i]));
+                    latencyRanges.add(new int[]{cur, cur + latencies[i], i});
                     cur += latencies[i] + 1;
                     totalLatency += i * latencies[i];
                     count += latencies[i];
@@ -260,10 +248,10 @@ public class PerfStats {
                 percentileIds[i] = (int) (count * percentiles[i]);
             }
 
-            for (LatencyRange lr : latencyRanges) {
+            for (int[] lr : latencyRanges) {
                 while ((index < percentileIds.length) &&
-                        (lr.start <= percentileIds[index]) && (percentileIds[index] <= lr.end)) {
-                    values[index++] = lr.latency;
+                        (lr[0] <= percentileIds[index]) && (percentileIds[index] <= lr[1])) {
+                    values[index++] = lr[2];
                 }
             }
             return values;

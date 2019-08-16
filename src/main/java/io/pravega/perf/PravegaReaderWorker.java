@@ -12,7 +12,7 @@ package io.pravega.perf;
 
 import io.pravega.client.stream.EventStreamReader;
 import io.pravega.client.ClientFactory;
-import io.pravega.client.stream.impl.UTF8StringSerializer;
+import io.pravega.client.stream.impl.ByteArraySerializer;
 import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.ReinitializationRequiredException;
 
@@ -20,7 +20,7 @@ import io.pravega.client.stream.ReinitializationRequiredException;
  * Class for Pravega reader/consumer.
  */
 public class PravegaReaderWorker extends ReaderWorker {
-    private final EventStreamReader<String> reader;
+    private final EventStreamReader<byte[]> reader;
 
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
                         long start, PerfStats stats, String readergrp,
@@ -29,11 +29,11 @@ public class PravegaReaderWorker extends ReaderWorker {
 
         final String readerSt = Integer.toString(readerId);
         reader = factory.createReader(
-                readerSt, readergrp, new UTF8StringSerializer(), ReaderConfig.builder().build());
+                readerSt, readergrp, new ByteArraySerializer(), ReaderConfig.builder().build());
     }
 
     @Override
-    public String readData() {
+    public byte[] readData() {
         try {
             return reader.readNextEvent(timeout).getEvent();
         } catch (ReinitializationRequiredException e) {

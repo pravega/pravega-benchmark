@@ -56,6 +56,7 @@ public class PravegaPerfTest {
         final long startTime = System.currentTimeMillis();
 
         options.addOption("controller", true, "Controller URI");
+        options.addOption("scope", true, "Scope name");
         options.addOption("stream", true, "Stream name");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
@@ -125,6 +126,7 @@ public class PravegaPerfTest {
                         if (producers != null) {
                             producers.forEach(WriterWorker::close);
                         }
+                        perfTest.closeReaderGroup();
                     } catch (InterruptedException ex) {
                         ex.printStackTrace();
                     }
@@ -141,6 +143,7 @@ public class PravegaPerfTest {
             if (producers != null) {
                 producers.forEach(WriterWorker::close);
             }
+            perfTest.closeReaderGroup();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -171,6 +174,7 @@ public class PravegaPerfTest {
         final String controllerUri;
         final int messageSize;
         final String streamName;
+        final String rdGrpName;
         final String scopeName;
         final boolean recreate;
         final boolean writeAndRead;
@@ -248,6 +252,12 @@ public class PravegaPerfTest {
                 streamName = null;
             }
 
+            if (commandline.hasOption("scope")) {
+                scopeName = commandline.getOptionValue("scope");
+            } else {
+                scopeName = SCOPE;
+            }
+
             if (commandline.hasOption("transactionspercommit")) {
                 transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
             } else {
@@ -283,8 +293,6 @@ public class PravegaPerfTest {
                 readFile = null;
             }
 
-            scopeName = SCOPE;
-
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
             }
@@ -295,6 +303,12 @@ public class PravegaPerfTest {
 
             if (producerCount == 0 && consumerCount == 0) {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
+            }
+
+            if (recreate) {
+                rdGrpName = streamName + startTime;
+            } else {
+                rdGrpName = streamName + "RdGrp";
             }
 
             if (producerCount > 0) {
@@ -362,6 +376,8 @@ public class PravegaPerfTest {
             }
         }
 
+        public abstract void closeReaderGroup();
+
         public abstract List<WriterWorker> getProducers();
 
         public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
@@ -383,7 +399,7 @@ public class PravegaPerfTest {
                     .maxBackoffMillis(5000).build(),
                     bgExecutor);
 
-            streamHandle = new PravegaStreamHandler(scopeName, streamName, controllerUri,
+            streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri,
                     segmentCount, TIMEOUT, controller,
                     bgExecutor);
 
@@ -440,7 +456,7 @@ public class PravegaPerfTest {
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
                                 runtimeSec, startTime, consumeStats,
-                                streamName, TIMEOUT, writeAndRead, factory))
+                                rdGrpName, TIMEOUT, writeAndRead, factory))
                         .collect(Collectors.toList());
             } else {
                 readers = null;
@@ -449,11 +465,11 @@ public class PravegaPerfTest {
         }
 
         @Override
-        public void shutdown(long endTime) {
+        public void closeReaderGroup() {
             if (readerGroup != null) {
                 readerGroup.close();
             }
-            super.shutdown(endTime);
         }
+
     }
 }

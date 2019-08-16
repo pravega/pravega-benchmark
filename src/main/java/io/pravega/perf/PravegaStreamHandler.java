@@ -41,6 +41,7 @@ import io.pravega.client.stream.Stream;
 public class PravegaStreamHandler {
     final String scope;
     final String stream;
+    final String rdGrpName;
     final String controllerUri;
     final ControllerImpl controller;
     final StreamManager streamManager;
@@ -48,13 +49,17 @@ public class PravegaStreamHandler {
     final ScheduledExecutorService bgexecutor;
     final int segCount;
     final int timeout;
+    ReaderGroupManager readerGroupManager;
+    ReaderGroupConfig rdGrpConfig;
 
     PravegaStreamHandler(String scope, String stream,
+                         String rdGrpName,
                          String uri, int segs,
                          int timeout, ControllerImpl contrl,
                          ScheduledExecutorService bgexecutor) throws Exception {
         this.scope = scope;
         this.stream = stream;
+        this.rdGrpName = rdGrpName;
         this.controllerUri = uri;
         this.controller = contrl;
         this.segCount = segs;
@@ -135,15 +140,25 @@ public class PravegaStreamHandler {
     }
 
     ReaderGroup createReaderGroup(boolean reset) throws URISyntaxException {
-        final ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scope,
-                ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
-        final ReaderGroupConfig rdGrpConfig = ReaderGroupConfig.builder()
-                            .stream(Stream.of(scope, stream)).build();
-        readerGroupManager.createReaderGroup(stream, rdGrpConfig);
-        final ReaderGroup rdGroup = readerGroupManager.getReaderGroup(stream);
+        if (readerGroupManager == null) {
+            readerGroupManager = ReaderGroupManager.withScope(scope,
+                    ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
+            rdGrpConfig = ReaderGroupConfig.builder()
+                    .stream(Stream.of(scope, stream)).build();
+        }
+        readerGroupManager.createReaderGroup(rdGrpName, rdGrpConfig);
+        final ReaderGroup rdGroup = readerGroupManager.getReaderGroup(rdGrpName);
         if (reset) {
             rdGroup.resetReaderGroup(rdGrpConfig);
         }
         return rdGroup;
+    }
+
+    void deleteReaderGroup() {
+        try {
+            readerGroupManager.deleteReaderGroup(rdGrpName);
+        } catch (RuntimeException e) {
+            System.out.println("Cannot delete reader group " + rdGrpName + " because it is already deleted");
+        }
     }
 }

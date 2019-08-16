@@ -23,7 +23,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     private int eventCount;
 
     @GuardedBy("this")
-    private Transaction<String> transaction;
+    private Transaction<byte[]> transaction;
 
     PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
@@ -40,7 +40,7 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     }
 
     @Override
-    public long recordWrite(String data, TriConsumer record) {
+    public long recordWrite(byte[] data, TriConsumer record) {
         long time = 0;
         try {
             synchronized (this) {
