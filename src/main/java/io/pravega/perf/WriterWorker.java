@@ -79,7 +79,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     /**
-     * Writes the data and benchmark.
+     * Writes the data and records statistics.
      *
      * @param data   data to write
      * @param record to call for benchmarking
@@ -88,7 +88,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     public abstract long recordWrite(byte[] data, TriConsumer record);
 
     /**
-     * Writes the data and benchmark.
+     * Writes the data. Does not record statistics.
      *
      * @param data data to write
      */

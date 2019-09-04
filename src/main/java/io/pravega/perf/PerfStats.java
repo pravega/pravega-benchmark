@@ -64,6 +64,10 @@ public class PerfStats {
         private boolean isEnd() {
             return this.bytes == -1 && this.startTime == -1;
         }
+
+        private boolean isAcked() {
+            return this.endTime != -1;
+        }
     }
 
     public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
@@ -100,21 +104,35 @@ public class PerfStats {
             long time = startTime;
             long idleCount = 0;
             TimeStamp t;
+            long sentEvents = 0;
+            long sentBytes = 0;
+            long ackedEvents = 0;
+            long ackedBytes = 0;
 
             while (doWork) {
                 t = queue.poll();
                 if (t != null) {
-                    if (t.isEnd()) {
-                        doWork = false;
+                    if (t.isAcked()) {
+                        if (t.isEnd()) {
+                            doWork = false;
+                        } else {
+                            ackedEvents++;
+                            ackedBytes += t.bytes;
+                            final int latency = (int) (t.endTime - t.startTime);
+                            window.record(t.bytes, latency);
+                            latencyRecorder.record(t.startTime, t.bytes, latency);
+                        }
+                        time = t.endTime;
+                        if (window.windowTimeMS(time) > windowInterval) {
+                            window.print(time);
+                            window.reset(time);
+                            double unAckedMiB = (sentBytes - ackedBytes) / 1024.0 / 1024.0;
+                            long unAckedEvents = sentEvents - ackedEvents;
+                            System.out.printf("%.3f MiB in %d events unacked", unAckedMiB, unAckedEvents);
+                        }
                     } else {
-                        final int latency = (int) (t.endTime - t.startTime);
-                        window.record(t.bytes, latency);
-                        latencyRecorder.record(t.startTime, t.bytes, latency);
-                    }
-                    time = t.endTime;
-                    if (window.windowTimeMS(time) > windowInterval) {
-                        window.print(time);
-                        window.reset(time);
+                        sentEvents++;
+                        sentBytes += t.bytes;
                     }
                 } else {
                     LockSupport.parkNanos(PARK_NS);
@@ -184,7 +202,7 @@ public class PerfStats {
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
-            System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
+            System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency);
         }
 
@@ -361,7 +379,7 @@ public class PerfStats {
      * Record the data write/read time of data.
      *
      * @param startTime starting time
-     * @param endTime   End time
+     * @param endTime   End time (-1 indicates that ack has not been received)
      * @param bytes     number of bytes written or read
      **/
     public void recordTime(long startTime, long endTime, int bytes) {

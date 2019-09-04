@@ -11,5 +11,5 @@
 package io.pravega.perf;
 
 public interface TriConsumer {
-    void accept(long a, long b, int c);
+    void accept(long startTime, long endTime, int bytes);
 }

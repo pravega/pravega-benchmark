@@ -41,6 +41,7 @@ public class PravegaWriterWorker extends WriterWorker {
     public long recordWrite(byte[] data, TriConsumer record) {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
+        record.accept(time, -1, data.length);
         ret = producer.writeEvent(data);
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
