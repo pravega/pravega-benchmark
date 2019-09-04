@@ -7,12 +7,16 @@ build
 .classpath
 .DS_Store
 bin/
+ca-certificates/
+!ca-certificates/README.txt
 classes/
 .settings
 .gradle
 output
 .idea
 target
+lib/
+!lib/README.txt
 log/
 out/
 .metadata/
