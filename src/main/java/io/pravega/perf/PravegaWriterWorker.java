@@ -16,25 +16,34 @@ import io.pravega.client.stream.EventStreamWriter;
 import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.impl.ByteArraySerializer;
 import io.pravega.client.stream.EventWriterConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class for Pravega writer/producer.
  */
 public class PravegaWriterWorker extends WriterWorker {
+    private static Logger log = LoggerFactory.getLogger(PravegaWriterWorker.class);
+
     final EventStreamWriter<byte[]> producer;
 
     PravegaWriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
-                        boolean writeAndRead, ClientFactory factory) {
+                        boolean writeAndRead, ClientFactory factory,
+                        boolean enableConnectionPooling) {
 
         super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
                 stats, streamName, eventsPerSec, writeAndRead);
 
+        log.info("enableConnectionPooling={}", enableConnectionPooling);
+
         this.producer = factory.createEventWriter(streamName,
                 new ByteArraySerializer(),
-                EventWriterConfig.builder().build());
+                EventWriterConfig.builder()
+                        .enableConnectionPooling(enableConnectionPooling)
+                        .build());
     }
 
     @Override

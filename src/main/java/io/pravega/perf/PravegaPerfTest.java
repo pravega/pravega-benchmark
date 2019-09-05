@@ -80,6 +80,7 @@ public class PravegaPerfTest {
                         "if -1, get the maximum throughput");
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
+        options.addOption("enableConnectionPooling", true, "enable connection pooling");
 
         options.addOption("help", false, "Help message");
 
@@ -194,6 +195,7 @@ public class PravegaPerfTest {
         final PerfStats produceStats;
         final PerfStats consumeStats;
         final long startTime;
+        final boolean enableConnectionPooling;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -292,6 +294,8 @@ public class PravegaPerfTest {
             } else {
                 readFile = null;
             }
+
+            enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
@@ -431,7 +435,7 @@ public class PravegaPerfTest {
                                     messageSize, startTime,
                                     produceStats, streamName,
                                     eventsPerSec, writeAndRead, factory,
-                                    transactionPerCommit))
+                                    transactionPerCommit, enableConnectionPooling))
                             .collect(Collectors.toList());
                 } else {
                     writers = IntStream.range(0, producerCount)
@@ -439,7 +443,7 @@ public class PravegaPerfTest {
                             .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
                                     EventsPerFlush, runtimeSec, false,
                                     messageSize, startTime, produceStats,
-                                    streamName, eventsPerSec, writeAndRead, factory))
+                                    streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling))
                             .collect(Collectors.toList());
                 }
             } else {

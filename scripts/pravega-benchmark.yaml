@@ -6,7 +6,7 @@ spec:
   parallelism: 3
   template:
     spec:
-      serviceAccount: examples-pravega
+      serviceAccount: examples3-pravega
       restartPolicy: Never
       containers:
         - name: benchmark
@@ -21,14 +21,15 @@ spec:
               memory: "4Gi"
           args: [
             "-controller", "tcp://nautilus-pravega-controller.nautilus-pravega.svc.cluster.local:9090",
-            "-scope", "examples",
+            "-scope", "examples3",
             "-stream", "benchmark5",
             #"-recreate", "1",
             "-segments", "96",
             "-producers", "1",
             "-time", "3600",  # Number of seconds to run
             "-size", "524288",
-#            "-throughput", "30",
+            "-throughput", "30",
+            "-enableConnectionPooling", "false",
           ]
           env:
             - name: JAVA_OPTS
