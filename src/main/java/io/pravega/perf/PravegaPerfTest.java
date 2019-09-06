@@ -533,7 +533,7 @@ public class PravegaPerfTest {
             props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
             props.put(ProducerConfig.ACKS_CONFIG, "all");
             props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
-            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
             // Enabling the producer IDEMPOTENCE is must to compare between Kafka and Pravega
             props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
             return props;
@@ -545,7 +545,7 @@ public class PravegaPerfTest {
             }
             final Properties props = new Properties();
             props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
-            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
             props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1);
             // Enabling the consumer to READ_COMMITTED is must to compare between Kafka and Pravega
