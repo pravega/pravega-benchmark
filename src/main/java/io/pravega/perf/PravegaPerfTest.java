@@ -321,7 +321,7 @@ public class PravegaPerfTest {
             if (fork) {
                 executor = new ForkJoinPool(threadCount);
             } else {
-                executor = Executors.newScheduledThreadPool(threadCount);
+                executor = Executors.newFixedThreadPool(threadCount);
             }
 
             if (recreate) {
