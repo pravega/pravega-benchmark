@@ -284,7 +284,7 @@ public class PravegaPerfTest {
             if (commandline.hasOption("fork")) {
                 fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
             } else {
-                fork = false;
+                fork = true;
             }
 
             if (commandline.hasOption("throughput")) {
