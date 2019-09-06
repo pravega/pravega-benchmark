@@ -24,6 +24,8 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -33,6 +35,8 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Class for Performance statistics.
  */
 public class PerfStats {
+    private static Logger log = LoggerFactory.getLogger(PerfStats.class);
+
     final private String action;
     final private String csvFile;
     final private int messageSize;
@@ -124,11 +128,10 @@ public class PerfStats {
                         }
                         time = t.endTime;
                         if (window.windowTimeMS(time) > windowInterval) {
-                            window.print(time);
-                            window.reset(time);
                             double unAckedMiB = (sentBytes - ackedBytes) / 1024.0 / 1024.0;
                             long unAckedEvents = sentEvents - ackedEvents;
-                            System.out.printf("%.3f MiB in %d events unacked", unAckedMiB, unAckedEvents);
+                            log.info(String.format("%s, %.3f MiB in %d events unacked", window.toString(time), unAckedMiB, unAckedEvents));
+                            window.reset(time);
                         }
                     } else {
                         sentEvents++;
@@ -141,7 +144,7 @@ public class PerfStats {
                         time = System.currentTimeMillis();
                         idleCount = 0;
                         if (window.windowTimeMS(time) > windowInterval) {
-                            window.print(time);
+                            log.info(window.toString(time));
                             window.reset(time);
                         }
                     }
@@ -193,16 +196,18 @@ public class PerfStats {
         }
 
         /**
-         * Print the window statistics
+         * Get the window statistics as a string
+         *
+         * Note that record and byte counters are for acked events.
          */
-        private void print(long time) {
+        private String toString(long time) {
             this.lastTime = time;
             assert this.lastTime > this.startTime : "Invalid Start and EndTime";
             final double elapsed = (this.lastTime - this.startTime) / 1000.0;
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
-            System.out.printf("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency\n",
+            return String.format("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency);
         }
 
@@ -292,11 +297,11 @@ public class PerfStats {
             final double mbPerSec = (this.totalBytes / (1024.0 * 1024.0)) / elapsed;
             int[] percs = getPercentiles();
 
-            System.out.printf(
+            log.info(String.format(
                     "%d records %s, %.3f records/sec, %d bytes record size, %.2f MB/sec, %.1f ms avg latency, %.1f ms max latency" +
                             ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th, %d ms 99.99th.\n",
                     count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
-                    percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]);
+                    percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]));
         }
     }
 
