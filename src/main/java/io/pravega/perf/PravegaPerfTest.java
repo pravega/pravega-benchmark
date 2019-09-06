@@ -90,6 +90,7 @@ public class PravegaPerfTest {
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
         options.addOption("fork", true, "Use Fork join Pool");
+        options.addOption("kafka", true, "Kafka Benchmarking");
 
         options.addOption("help", false, "Help message");
 
