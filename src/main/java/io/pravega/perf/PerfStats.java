@@ -84,7 +84,7 @@ public class PerfStats {
         final private static int NS_PER_MICRO = 1000;
         final private static int MICROS_PER_MS = 1000;
         final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
-        final private static int PARK_NS = NS_PER_MICRO;
+        final private static int PARK_NS = NS_PER_MS;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -95,7 +95,7 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            final int minWaitTimeMS = windowInterval / 50;
+            final int minWaitTimeMS = windowInterval / 10;
             final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
