@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -38,7 +39,7 @@ public class PerfStats {
     final private int messageSize;
     final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
-    final private ForkJoinPool executor;
+    final private ExecutorService executor;
 
     @GuardedBy("this")
     private Future<Void> ret;

@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Performance benchmark for Pravega.
@@ -102,7 +103,7 @@ public class PravegaPerfTest {
             System.exit(0);
         }
 
-        final ForkJoinPool executor = new ForkJoinPool();
+        final ExecutorService executor = new ForkJoinPool();
 
         try {
             final List<WriterWorker> producers = perfTest.getProducers();
