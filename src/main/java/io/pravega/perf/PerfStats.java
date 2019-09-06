@@ -67,13 +67,13 @@ public class PerfStats {
         }
     }
 
-    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
+    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile, ExecutorService executor) {
         this.action = action;
         this.messageSize = messageSize;
         this.windowInterval = reportingInterval;
         this.csvFile = csvFile;
+        this.executor = executor;
         this.queue = new ConcurrentLinkedQueue<>();
-        this.executor = new ForkJoinPool(1);
         this.ret = null;
     }
 

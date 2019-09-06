@@ -81,6 +81,7 @@ public class PravegaPerfTest {
                         "if -1, get the maximum throughput");
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
+        options.addOption("fork", true, "Use Fork join Pool");
 
         options.addOption("help", false, "Help message");
 
@@ -103,7 +104,7 @@ public class PravegaPerfTest {
             System.exit(0);
         }
 
-        final ExecutorService executor = new ForkJoinPool();
+        final ExecutorService executor = perfTest.getExecutor();
 
         try {
             final List<WriterWorker> producers = perfTest.getProducers();
@@ -172,6 +173,7 @@ public class PravegaPerfTest {
         static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
+        final ExecutorService executor;
         final String controllerUri;
         final int messageSize;
         final String streamName;
@@ -179,6 +181,7 @@ public class PravegaPerfTest {
         final String scopeName;
         final boolean recreate;
         final boolean writeAndRead;
+        final boolean fork;
         final int producerCount;
         final int consumerCount;
         final int segmentCount;
@@ -195,6 +198,7 @@ public class PravegaPerfTest {
         final PerfStats produceStats;
         final PerfStats consumeStats;
         final long startTime;
+
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -277,6 +281,12 @@ public class PravegaPerfTest {
                 recreate = producerCount > 0 && consumerCount > 0;
             }
 
+            if (commandline.hasOption("fork")) {
+                fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
+            } else {
+                fork = false;
+            }
+
             if (commandline.hasOption("throughput")) {
                 throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
             } else {
@@ -306,6 +316,14 @@ public class PravegaPerfTest {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
             }
 
+            final int threadCount = producerCount + consumerCount + 6;
+
+            if (fork) {
+                executor = new ForkJoinPool(threadCount);
+            } else {
+                executor = Executors.newScheduledThreadPool(threadCount);
+            }
+
             if (recreate) {
                 rdGrpName = streamName + startTime;
             } else {
@@ -322,7 +340,7 @@ public class PravegaPerfTest {
                 if (writeAndRead) {
                     produceStats = null;
                 } else {
-                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
+                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile, executor);
                 }
 
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
@@ -347,7 +365,7 @@ public class PravegaPerfTest {
                 } else {
                     action = "Reading";
                 }
-                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile);
+                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile, executor);
                 eventsPerConsumer = events / consumerCount;
             } else {
                 consumeStats = null;
@@ -375,6 +393,10 @@ public class PravegaPerfTest {
             } catch (ExecutionException | InterruptedException ex) {
                 ex.printStackTrace();
             }
+        }
+
+        public ExecutorService getExecutor() {
+            return executor;
         }
 
         public abstract void closeReaderGroup();
