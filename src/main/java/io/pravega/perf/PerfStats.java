@@ -352,7 +352,6 @@ public class PerfStats {
         if (this.ret != null) {
             queue.add(new TimeStamp(endTime));
             ret.get();
-            executor.shutdownNow();
             queue.clear();
             this.ret = null;
         }
