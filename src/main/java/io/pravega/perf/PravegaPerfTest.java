@@ -163,12 +163,7 @@ public class PravegaPerfTest {
 
     public static Test createTest(long startTime, CommandLine commandline, Options options) {
         try {
-            boolean runKafka;
-            if (commandline.hasOption("kafka")) {
-                runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka"));
-            } else {
-                runKafka = false;
-            }
+            boolean runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka", "false"));
             if (runKafka) {
                 return new KafkaTest(startTime, commandline);
             } else {
@@ -221,37 +216,33 @@ public class PravegaPerfTest {
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
-            if (commandline.hasOption("controller")) {
-                controllerUri = commandline.getOptionValue("controller");
-            } else {
-                controllerUri = null;
+            controllerUri = commandline.getOptionValue("controller", null);
+            streamName = commandline.getOptionValue("stream", null);
+            producerCount = Integer.parseInt(commandline.getOptionValue("producers", "0"));
+            consumerCount = Integer.parseInt(commandline.getOptionValue("consumers", "0"));
+
+            if (controllerUri == null) {
+                throw new IllegalArgumentException("Error: Must specify Controller IP address");
             }
 
-            if (commandline.hasOption("producers")) {
-                producerCount = Integer.parseInt(commandline.getOptionValue("producers"));
-            } else {
-                producerCount = 0;
+            if (streamName == null) {
+                throw new IllegalArgumentException("Error: Must specify stream Name");
             }
 
-            if (commandline.hasOption("consumers")) {
-                consumerCount = Integer.parseInt(commandline.getOptionValue("consumers"));
-            } else {
-                consumerCount = 0;
+            if (producerCount == 0 && consumerCount == 0) {
+                throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
             }
 
-            if (commandline.hasOption("events")) {
-                events = Integer.parseInt(commandline.getOptionValue("events"));
-            } else {
-                events = 0;
-            }
-
-            if (commandline.hasOption("flush")) {
-                int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
-                if (flushEvents > 0) {
-                    EventsPerFlush = flushEvents;
-                } else {
-                    EventsPerFlush = Integer.MAX_VALUE;
-                }
+            events = Integer.parseInt(commandline.getOptionValue("events", "0"));
+            messageSize = Integer.parseInt(commandline.getOptionValue("size","0"));
+            scopeName = commandline.getOptionValue("scope",SCOPE);
+            transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit","0"));
+            fork = Boolean.parseBoolean(commandline.getOptionValue("fork", "true"));
+            writeFile = commandline.getOptionValue("writecsv",null);
+            readFile = commandline.getOptionValue("readcsv", null);
+            int flushEvents = Integer.parseInt(commandline.getOptionValue("flush", "0"));
+            if (flushEvents > 0) {
+                EventsPerFlush = flushEvents;
             } else {
                 EventsPerFlush = Integer.MAX_VALUE;
             }
@@ -262,30 +253,6 @@ public class PravegaPerfTest {
                 runtimeSec = 0;
             } else {
                 runtimeSec = MAXTIME;
-            }
-
-            if (commandline.hasOption("size")) {
-                messageSize = Integer.parseInt(commandline.getOptionValue("size"));
-            } else {
-                messageSize = 0;
-            }
-
-            if (commandline.hasOption("stream")) {
-                streamName = commandline.getOptionValue("stream");
-            } else {
-                streamName = null;
-            }
-
-            if (commandline.hasOption("scope")) {
-                scopeName = commandline.getOptionValue("scope");
-            } else {
-                scopeName = SCOPE;
-            }
-
-            if (commandline.hasOption("transactionspercommit")) {
-                transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
-            } else {
-                transactionPerCommit = 0;
             }
 
             if (commandline.hasOption("segments")) {
@@ -300,43 +267,12 @@ public class PravegaPerfTest {
                 recreate = producerCount > 0 && consumerCount > 0;
             }
 
-            if (commandline.hasOption("fork")) {
-                fork = Boolean.parseBoolean(commandline.getOptionValue("fork"));
-            } else {
-                fork = true;
-            }
-
             if (commandline.hasOption("throughput")) {
                 throughput = Double.parseDouble(commandline.getOptionValue("throughput"));
             } else {
                 throughput = -1;
             }
-
-            if (commandline.hasOption("writecsv")) {
-                writeFile = commandline.getOptionValue("writecsv");
-            } else {
-                writeFile = null;
-            }
-            if (commandline.hasOption("readcsv")) {
-                readFile = commandline.getOptionValue("readcsv");
-            } else {
-                readFile = null;
-            }
-
-            if (controllerUri == null) {
-                throw new IllegalArgumentException("Error: Must specify Controller IP address");
-            }
-
-            if (streamName == null) {
-                throw new IllegalArgumentException("Error: Must specify stream Name");
-            }
-
-            if (producerCount == 0 && consumerCount == 0) {
-                throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
-            }
-
             final int threadCount = producerCount + consumerCount + 6;
-
             if (fork) {
                 executor = new ForkJoinPool(threadCount);
             } else {
