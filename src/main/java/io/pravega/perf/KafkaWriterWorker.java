@@ -35,7 +35,8 @@ public class KafkaWriterWorker extends WriterWorker {
     public long recordWrite(byte[] data, TriConsumer record) {
         final long time = System.currentTimeMillis();
         producer.send(new ProducerRecord<>(streamName, data), (metadata, exception) -> {
-            record.accept(time, System.currentTimeMillis(), data.length);
+            final long endTime = System.currentTimeMillis();
+            record.accept(time, endTime, data.length);
         });
         return time;
     }
