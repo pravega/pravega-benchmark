@@ -1,0 +1,39 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: pravega-benchmark
+spec:
+  parallelism: 3
+  template:
+    spec:
+      serviceAccount: examples-pravega
+      restartPolicy: Never
+      containers:
+        - name: benchmark
+          image: claudiofahey/pravega-benchmark:0.5.0
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+          args: [
+            "-controller", "tcp://nautilus-pravega-controller.nautilus-pravega.svc.cluster.local:9090",
+            "-scope", "examples",
+            "-stream", "benchmark5",
+            #"-recreate", "1",
+            "-segments", "96",
+            "-producers", "1",
+            "-time", "3600",  # Number of seconds to run
+            "-size", "524288",
+#            "-throughput", "30",
+          ]
+          env:
+            - name: JAVA_OPTS
+              value: "-Xmx2g -Xms1g"
+            - name: pravega_client_auth_method
+              value: Bearer
+            - name: pravega_client_auth_loadDynamic
+              value: "true"
