@@ -66,7 +66,6 @@ public class PravegaStreamHandler {
         this.timeout = timeout;
         this.bgexecutor = bgexecutor;
         streamManager = StreamManager.create(new URI(uri));
-        streamManager.createScope(scope);
         streamconfig = StreamConfiguration.builder().scope(scope).streamName(stream)
                 .scalingPolicy(ScalingPolicy.fixed(segCount))
                 .build();
