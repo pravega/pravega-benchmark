@@ -47,34 +47,34 @@ Running Pravega benchmark tool locally:
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
 usage: pravega-benchmark
- -consumers <arg>               Number of consumers
- -controller <arg>              Controller URI
- -events <arg>                  Number of events/records if 'time' not
-                                specified;
-                                otherwise, Maximum events per second by
-                                producer(s) and/or Number of events per
-                                consumer
- -flush <arg>                   Each producer calls flush after writing
-                                <arg> number of of events/records; Not
-                                applicable, if both producers and
-                                consumers are specified
- -help                          Help message
- -producers <arg>               Number of producers
- -readcsv <arg>                 CSV file to record read latencies
- -recreate <arg>                If the stream is already existing, delete
-                                and recreate the same
- -scope <arg>                   Scope name
- -segments <arg>                Number of segments
- -size <arg>                    Size of each message (event or record)
- -stream <arg>                  Stream name
- -throughput <arg>              if > 0 , throughput in MB/s
-                                if 0 , writes 'events'
-                                if -1, get the maximum throughput
- -time <arg>                    Number of seconds the code runs
- -transactionspercommit <arg>   Number of events before a transaction is
-                                committed
- -writecsv <arg>                CSV file to record write latencies
-```
+ -consumers <arg>                 Number of consumers
+ -controller <arg>                Controller URI
+ -enableConnectionPooling <arg>   enable connection pooling
+ -events <arg>                    Number of events/records if 'time' not
+                                  specified;
+                                  otherwise, Maximum events per second by
+                                  producer(s) and/or Number of events per
+                                  consumer
+ -flush <arg>                     Each producer calls flush after writing
+                                  <arg> number of of events/records; Not
+                                  applicable, if both producers and
+                                  consumers are specified
+ -help                            Help message
+ -producers <arg>                 Number of producers
+ -readcsv <arg>                   CSV file to record read latencies
+ -recreate <arg>                  If the stream is already existing,
+                                  delete and recreate the same
+ -scope <arg>                     Scope name
+ -segments <arg>                  Number of segments
+ -size <arg>                      Size of each message (event or record)
+ -stream <arg>                    Stream name
+ -throughput <arg>                if > 0 , throughput in MB/s
+                                  if 0 , writes 'events'
+                                  if -1, get the maximum throughput
+ -time <arg>                      Number of seconds the code runs
+ -transactionspercommit <arg>     Number of events before a transaction is
+                                  committed
+ -writecsv <arg>                  CSV file to record write latencies```
 
 ## Running Performance benchmarking
 
