@@ -10,14 +10,19 @@
 
 package io.pravega.perf;
 
-import io.pravega.client.ClientFactory;
+import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.Transaction;
 import io.pravega.client.stream.TxnFailedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.GuardedBy;
 
 public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
+    private static Logger log = LoggerFactory.getLogger(PravegaTransactionWriterWorker.class);
+
     private final int transactionsPerCommit;
+    private final boolean enableWatermark;
 
     @GuardedBy("this")
     private int eventCount;
@@ -25,16 +30,22 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
     @GuardedBy("this")
     private Transaction<byte[]> transaction;
 
+    /**
+     *
+     * @param enableWatermark If true, the current time will be provided each time the transaction is committed.
+     */
     PravegaTransactionWriterWorker(int sensorId, int events,
                                    int secondsToRun, boolean isRandomKey,
                                    int messageSize, long start,
                                    PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
-                                   ClientFactory factory, int transactionsPerCommit, boolean enableConnectionPooling) {
-
+                                   EventStreamClientFactory factory, int transactionsPerCommit, boolean enableConnectionPooling,
+                                   boolean enableWatermark) {
         super(sensorId, events, Integer.MAX_VALUE, secondsToRun, isRandomKey,
-                messageSize, start, stats, streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling);
+                messageSize, start, stats, streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
+                -1);
 
         this.transactionsPerCommit = transactionsPerCommit;
+        this.enableWatermark = enableWatermark;
         eventCount = 0;
         transaction = producer.beginTxn();
     }
@@ -50,7 +61,12 @@ public class PravegaTransactionWriterWorker extends PravegaWriterWorker {
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
                     eventCount = 0;
-                    transaction.commit();
+                    if (enableWatermark) {
+                        log.info("recordWrite: commit({})", time);
+                        transaction.commit(time);
+                    } else {
+                        transaction.commit();
+                    }
                     transaction = producer.beginTxn();
                 }
             }

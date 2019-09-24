@@ -10,26 +10,49 @@
 
 package io.pravega.perf;
 
+import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.EventStreamReader;
-import io.pravega.client.ClientFactory;
-import io.pravega.client.stream.impl.ByteArraySerializer;
 import io.pravega.client.stream.ReaderConfig;
 import io.pravega.client.stream.ReinitializationRequiredException;
+import io.pravega.client.stream.Stream;
+import io.pravega.client.stream.TimeWindow;
+import io.pravega.client.stream.impl.ByteArraySerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Class for Pravega reader/consumer.
  */
 public class PravegaReaderWorker extends ReaderWorker {
-    private final EventStreamReader<byte[]> reader;
+    private static Logger log = LoggerFactory.getLogger(PravegaWriterWorker.class);
 
+    private final EventStreamReader<byte[]> reader;
+    private final Stream stream;
+    private final ScheduledExecutorService watermarkExecutor = Executors.newScheduledThreadPool(1);
+
+    /**
+     *
+     * @param readWatermarkPeriodMillis If >0, watermarks will be read with a period of this many milliseconds.
+     */
     PravegaReaderWorker(int readerId, int events, int secondsToRun,
                         long start, PerfStats stats, String readergrp,
-                        int timeout, boolean writeAndRead, ClientFactory factory) {
+                        int timeout, boolean writeAndRead, EventStreamClientFactory factory,
+                        Stream stream, long readWatermarkPeriodMillis) {
         super(readerId, events, secondsToRun, start, stats, readergrp, timeout, writeAndRead);
 
         final String readerSt = Integer.toString(readerId);
         reader = factory.createReader(
                 readerSt, readergrp, new ByteArraySerializer(), ReaderConfig.builder().build());
+        this.stream = stream;
+
+        if (readWatermarkPeriodMillis > 0) {
+            watermarkExecutor.scheduleAtFixedRate(this::readWatermark, readWatermarkPeriodMillis, readWatermarkPeriodMillis,
+                    TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override
@@ -41,8 +64,19 @@ public class PravegaReaderWorker extends ReaderWorker {
         }
     }
 
+    private void readWatermark() {
+        TimeWindow currentTimeWindow = reader.getCurrentTimeWindow(stream);
+        log.info("readWatermark: currentTimeWindow={}", currentTimeWindow);
+    }
+
     @Override
     public void close() {
+        watermarkExecutor.shutdown();
+        try {
+            watermarkExecutor.awaitTermination(1, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         reader.close();
     }
 }

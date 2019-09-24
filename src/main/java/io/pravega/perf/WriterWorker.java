@@ -10,6 +10,9 @@
 
 package io.pravega.perf;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -21,6 +24,8 @@ import java.util.concurrent.ExecutionException;
  * Abstract class for Writers.
  */
 public abstract class WriterWorker extends Worker implements Callable<Void> {
+    private static Logger log = LoggerFactory.getLogger(WriterWorker.class);
+
     final private static int MS_PER_SEC = 1000;
     final private Performance perf;
     final private byte[] payload;
@@ -118,6 +123,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriter() throws InterruptedException, IOException {
+        log.info("EventsWriter: Running");
         for (int i = 0; i < events; i++) {
             recordWrite(payload, stats::recordTime);
         }
@@ -126,6 +132,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterSleep() throws InterruptedException, IOException {
+        log.info("EventsWriterSleep: Running");
         final EventsController eCnt = new EventsController(System.currentTimeMillis(), eventsPerSec);
         int cnt = 0;
         while (cnt < events) {
@@ -139,6 +146,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterTime() throws InterruptedException, IOException {
+        log.info("EventsWriterTime: Running");
         final long msToRun = secondsToRun * MS_PER_SEC;
         long time = System.currentTimeMillis();
         while ((time - startTime) < msToRun) {
@@ -149,6 +157,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterTimeSleep() throws InterruptedException, IOException {
+        log.info("EventsWriterTimeSleep: Running");
         final long msToRun = secondsToRun * MS_PER_SEC;
         long time = System.currentTimeMillis();
         final EventsController eCnt = new EventsController(time, eventsPerSec);
@@ -166,6 +175,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterRW() throws InterruptedException, IOException {
+        log.info("EventsWriterRW: Running");
         final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
         final long time = System.currentTimeMillis();
         final EventsController eCnt = new EventsController(time, eventsPerSec);
@@ -187,6 +197,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
 
     private void EventsWriterTimeRW() throws InterruptedException, IOException {
+        log.info("EventsWriterTimeRW: Running");
         final long msToRun = secondsToRun * MS_PER_SEC;
         final ByteBuffer timeBuffer = ByteBuffer.allocate(TIME_HEADER_SIZE);
         long time = System.currentTimeMillis();

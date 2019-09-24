@@ -11,34 +11,32 @@
 package io.pravega.perf;
 
 import io.pravega.client.ClientConfig;
-import io.pravega.client.ClientFactory;
+import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.ReaderGroup;
+import io.pravega.client.stream.impl.ClientFactoryImpl;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
-import io.pravega.client.stream.impl.ClientFactoryImpl;
-
-import java.io.IOException;
-import java.net.URISyntaxException;
-
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
+import java.io.IOException;
 import java.net.URI;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.stream.IntStream;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * Performance benchmark for Pravega.
@@ -81,6 +79,14 @@ public class PravegaPerfTest {
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
         options.addOption("enableConnectionPooling", true, "Set to false to disable connection pooling");
+        options.addOption("writeWatermarkPeriodMillis", true,
+                "If -1, watermarks will not be written.\n" +
+                "If 0 and not using transactions, watermarks will be written after every event.\n" +
+                "If >0 and not using transactions, watermarks will be written with a period of this many milliseconds.\n" +
+                "If >= 0 and using transactions, watermarks will be written on each commit.");
+        options.addOption("readWatermarkPeriodMillis", true,
+                "If -1, watermarks will not be read.\n" +
+                "If >0, watermarks will be read with a period of this many milliseconds.");
 
         options.addOption("help", false, "Help message");
 
@@ -196,6 +202,8 @@ public class PravegaPerfTest {
         final PerfStats consumeStats;
         final long startTime;
         final boolean enableConnectionPooling;
+        final long writeWatermarkPeriodMillis;
+        final long readWatermarkPeriodMillis;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -297,6 +305,9 @@ public class PravegaPerfTest {
 
             enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
+            writeWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("writeWatermarkPeriodMillis", "-1"));
+            readWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("readWatermarkPeriodMillis", "-1"));
+
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
             }
@@ -390,7 +401,7 @@ public class PravegaPerfTest {
 
     static private class PravegaTest extends Test {
         final PravegaStreamHandler streamHandle;
-        final ClientFactory factory;
+        final EventStreamClientFactory factory;
         final ReaderGroup readerGroup;
 
         PravegaTest(long startTime, CommandLine commandline) throws
@@ -428,6 +439,7 @@ public class PravegaPerfTest {
 
             if (producerCount > 0) {
                 if (transactionPerCommit > 0) {
+                    final boolean enableWatermark = writeWatermarkPeriodMillis >= 0;
                     writers = IntStream.range(0, producerCount)
                             .boxed()
                             .map(i -> new PravegaTransactionWriterWorker(i, eventsPerProducer,
@@ -435,7 +447,8 @@ public class PravegaPerfTest {
                                     messageSize, startTime,
                                     produceStats, streamName,
                                     eventsPerSec, writeAndRead, factory,
-                                    transactionPerCommit, enableConnectionPooling))
+                                    transactionPerCommit, enableConnectionPooling,
+                                    enableWatermark))
                             .collect(Collectors.toList());
                 } else {
                     writers = IntStream.range(0, producerCount)
@@ -443,7 +456,8 @@ public class PravegaPerfTest {
                             .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
                                     EventsPerFlush, runtimeSec, false,
                                     messageSize, startTime, produceStats,
-                                    streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling))
+                                    streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
+                                    writeWatermarkPeriodMillis))
                             .collect(Collectors.toList());
                 }
             } else {
@@ -460,7 +474,9 @@ public class PravegaPerfTest {
                         .boxed()
                         .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
                                 runtimeSec, startTime, consumeStats,
-                                rdGrpName, TIMEOUT, writeAndRead, factory))
+                                rdGrpName, TIMEOUT, writeAndRead, factory,
+                                io.pravega.client.stream.Stream.of(scopeName, streamName),
+                                readWatermarkPeriodMillis))
                         .collect(Collectors.toList());
             } else {
                 readers = null;
