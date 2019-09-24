@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * Class for Pravega reader/consumer.
  */
 public class PravegaReaderWorker extends ReaderWorker {
-    private static Logger log = LoggerFactory.getLogger(PravegaWriterWorker.class);
+    private static Logger log = LoggerFactory.getLogger(PravegaReaderWorker.class);
 
     private final EventStreamReader<byte[]> reader;
     private final Stream stream;
