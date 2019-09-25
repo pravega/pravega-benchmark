@@ -77,7 +77,7 @@ public class PravegaWriterWorker extends WriterWorker {
             final long time = System.currentTimeMillis();
             if (time > nextNoteTime) {
                 producer.noteTime(time);
-                log.info("noteTimePeriodically: noteTime({})", time);
+                log.debug("noteTimePeriodically: noteTime({})", time);
                 nextNoteTime += writeWatermarkPeriodMillis;
             }
         }

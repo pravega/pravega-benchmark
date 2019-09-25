@@ -90,7 +90,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                 if (eventCount >= transactionsPerCommit) {
                     eventCount = 0;
                     if (enableWatermark) {
-                        log.info("recordWrite: commit({})", time);
+                        log.debug("recordWrite: commit({})", time);
                         transaction.commit(time);
                     } else {
                         transaction.commit();
@@ -123,7 +123,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                 if (transaction != null) {
                     if (enableWatermark) {
                         long time = System.currentTimeMillis();
-                        log.info("flush: commit({})", time);
+                        log.debug("flush: commit({})", time);
                         transaction.commit(time);
                     } else {
                         transaction.commit();

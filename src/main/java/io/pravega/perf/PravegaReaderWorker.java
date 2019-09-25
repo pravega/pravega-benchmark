@@ -66,7 +66,7 @@ public class PravegaReaderWorker extends ReaderWorker {
 
     private void readWatermark() {
         TimeWindow currentTimeWindow = reader.getCurrentTimeWindow(stream);
-        log.info("readWatermark: currentTimeWindow={}", currentTimeWindow);
+        log.debug("readWatermark: currentTimeWindow={}", currentTimeWindow);
     }
 
     @Override
