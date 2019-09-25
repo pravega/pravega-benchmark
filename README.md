@@ -172,3 +172,36 @@ The -throughput -1 specifies the writes tries to write the events at the maximum
 ### Recording the latencies to CSV files
 User can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
 in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
+
+## Running in Docker
+
+Build and push the Docker image to your repo.
+```
+export DOCKER_REPOSITORY=<your Docker user name>
+export IMAGE_TAG=latest
+scripts/build-docker.sh
+```
+
+Sample command to run in Docker:
+```
+docker run --rm -it \
+--network host \
+${DOCKER_REPOSITORY}/pravega-benchmark:${IMAGE_TAG} \
+-controller tcp://localhost:9090 \
+-stream benchmark1 -producers 1 -size 100 -throughput 0.01 -time 15
+```
+
+## Running in Kubernetes
+
+You must first build and push the Docker image as described above.
+
+Edit the file scripts/pravega-benchmark.yaml.
+You must change the image value to match the DOCKER_REPOSITORY and IMAGE_TAG you used
+when built the Docker image.
+You must change the Pravega controller URI.
+You may also set other parameters as desired.
+
+```
+export NAMESPACE=examples
+scripts/pravega-benchmark-k8s.sh.
+```
