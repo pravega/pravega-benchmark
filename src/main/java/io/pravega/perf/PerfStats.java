@@ -13,9 +13,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -38,7 +38,7 @@ public class PerfStats {
     final private int messageSize;
     final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
-    final private ForkJoinPool executor;
+    final private ExecutorService executor;
 
     @GuardedBy("this")
     private Future<Void> ret;
@@ -66,13 +66,13 @@ public class PerfStats {
         }
     }
 
-    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
+    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile, ExecutorService executor) {
         this.action = action;
         this.messageSize = messageSize;
         this.windowInterval = reportingInterval;
         this.csvFile = csvFile;
+        this.executor = executor;
         this.queue = new ConcurrentLinkedQueue<>();
-        this.executor = new ForkJoinPool(1);
         this.ret = null;
     }
 
@@ -83,7 +83,7 @@ public class PerfStats {
         final private static int NS_PER_MICRO = 1000;
         final private static int MICROS_PER_MS = 1000;
         final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
-        final private static int PARK_NS = NS_PER_MICRO;
+        final private static int PARK_NS = NS_PER_MS;
         final private long startTime;
 
         private QueueProcessor(long startTime) {
@@ -94,7 +94,7 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            final int minWaitTimeMS = windowInterval / 50;
+            final int minWaitTimeMS = windowInterval / 10;
             final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
@@ -351,7 +351,6 @@ public class PerfStats {
         if (this.ret != null) {
             queue.add(new TimeStamp(endTime));
             ret.get();
-            executor.shutdownNow();
             queue.clear();
             this.ret = null;
         }

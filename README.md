@@ -10,7 +10,7 @@ You may obtain a copy of the License at
 
 # Pravega Benchmark Tool
 
-The Pravega benchmark tool used for the performance benchmarking of pravega streaming storage cluster.
+The Pravega benchmark tool used for the performance benchmarking of pravega  and Kafka streaming storage clusters.
 This tool performs the throughput and latency analysis for the multi producers/writers and consumers/readers of pravega.
 it also validates the end to end latency. The write and/or read latencies can be stored in a CSV file for later analysis.
 At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95th , 99th, 99.9th and 99.99th latency percentiles.
@@ -46,7 +46,6 @@ Running Pravega benchmark tool locally:
 
 ```
 <dir>/pravega-benchmark$ ./run/pravega-benchmark/bin/pravega-benchmark  -help
-usage: pravega-benchmark
  -consumers <arg>               Number of consumers
  -controller <arg>              Controller URI
  -events <arg>                  Number of events/records if 'time' not
@@ -58,7 +57,9 @@ usage: pravega-benchmark
                                 <arg> number of of events/records; Not
                                 applicable, if both producers and
                                 consumers are specified
+ -fork <arg>                    Use Fork join Pool
  -help                          Help message
+ -kafka <arg>                   Kafka Benchmarking
  -producers <arg>               Number of producers
  -readcsv <arg>                 CSV file to record read latencies
  -recreate <arg>                If the stream is already existing, delete
@@ -172,3 +173,7 @@ The -throughput -1 specifies the writes tries to write the events at the maximum
 ### Recording the latencies to CSV files
 User can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
 in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
+    
+### Kafka Benchmarking
+User can set the option "-kafka true" for Kafka Benchmarking. User should create the topics manually before running this for kafka benchmarking. Unlike Pravega benchmarking, this tool does not create the topic automatically. This tools treats stream name as a topic name.
+    

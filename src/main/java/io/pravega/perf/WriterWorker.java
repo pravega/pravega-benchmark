@@ -194,7 +194,7 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 
         for (int i = 0; (time - startTime) < msToRun; i++) {
             time = System.currentTimeMillis();
-            byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
+            byte[] bytes = timeBuffer.putLong(0, time).array();
             System.arraycopy(bytes, 0, payload, 0, bytes.length);
             writeData(payload);
                 /*

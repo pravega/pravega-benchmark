@@ -17,6 +17,12 @@ import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.stream.impl.ControllerImplConfig;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.requests.IsolationLevel;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 
@@ -39,6 +45,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.Properties;
+import java.util.Locale;
 
 /**
  * Performance benchmark for Pravega.
@@ -80,6 +89,8 @@ public class PravegaPerfTest {
                         "if -1, get the maximum throughput");
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
+        options.addOption("fork", true, "Use Fork join Pool");
+        options.addOption("kafka", true, "Kafka Benchmarking");
 
         options.addOption("help", false, "Help message");
 
@@ -102,7 +113,7 @@ public class PravegaPerfTest {
             System.exit(0);
         }
 
-        final ForkJoinPool executor = new ForkJoinPool();
+        final ExecutorService executor = perfTest.getExecutor();
 
         try {
             final List<WriterWorker> producers = perfTest.getProducers();
@@ -152,7 +163,12 @@ public class PravegaPerfTest {
 
     public static Test createTest(long startTime, CommandLine commandline, Options options) {
         try {
-            return new PravegaTest(startTime, commandline);
+            boolean runKafka = Boolean.parseBoolean(commandline.getOptionValue("kafka", "false"));
+            if (runKafka) {
+                return new KafkaTest(startTime, commandline);
+            } else {
+                return new PravegaTest(startTime, commandline);
+            }
         } catch (IllegalArgumentException ex) {
             ex.printStackTrace();
             final HelpFormatter formatter = new HelpFormatter();
@@ -171,6 +187,7 @@ public class PravegaPerfTest {
         static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
+        final ExecutorService executor;
         final String controllerUri;
         final int messageSize;
         final String streamName;
@@ -178,6 +195,7 @@ public class PravegaPerfTest {
         final String scopeName;
         final boolean recreate;
         final boolean writeAndRead;
+        final boolean fork;
         final int producerCount;
         final int consumerCount;
         final int segmentCount;
@@ -195,39 +213,36 @@ public class PravegaPerfTest {
         final PerfStats consumeStats;
         final long startTime;
 
+
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
-            if (commandline.hasOption("controller")) {
-                controllerUri = commandline.getOptionValue("controller");
-            } else {
-                controllerUri = null;
+            controllerUri = commandline.getOptionValue("controller", null);
+            streamName = commandline.getOptionValue("stream", null);
+            producerCount = Integer.parseInt(commandline.getOptionValue("producers", "0"));
+            consumerCount = Integer.parseInt(commandline.getOptionValue("consumers", "0"));
+
+            if (controllerUri == null) {
+                throw new IllegalArgumentException("Error: Must specify Controller IP address");
             }
 
-            if (commandline.hasOption("producers")) {
-                producerCount = Integer.parseInt(commandline.getOptionValue("producers"));
-            } else {
-                producerCount = 0;
+            if (streamName == null) {
+                throw new IllegalArgumentException("Error: Must specify stream Name");
             }
 
-            if (commandline.hasOption("consumers")) {
-                consumerCount = Integer.parseInt(commandline.getOptionValue("consumers"));
-            } else {
-                consumerCount = 0;
+            if (producerCount == 0 && consumerCount == 0) {
+                throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
             }
 
-            if (commandline.hasOption("events")) {
-                events = Integer.parseInt(commandline.getOptionValue("events"));
-            } else {
-                events = 0;
-            }
-
-            if (commandline.hasOption("flush")) {
-                int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
-                if (flushEvents > 0) {
-                    EventsPerFlush = flushEvents;
-                } else {
-                    EventsPerFlush = Integer.MAX_VALUE;
-                }
+            events = Integer.parseInt(commandline.getOptionValue("events", "0"));
+            messageSize = Integer.parseInt(commandline.getOptionValue("size","0"));
+            scopeName = commandline.getOptionValue("scope",SCOPE);
+            transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit","0"));
+            fork = Boolean.parseBoolean(commandline.getOptionValue("fork", "true"));
+            writeFile = commandline.getOptionValue("writecsv",null);
+            readFile = commandline.getOptionValue("readcsv", null);
+            int flushEvents = Integer.parseInt(commandline.getOptionValue("flush", "0"));
+            if (flushEvents > 0) {
+                EventsPerFlush = flushEvents;
             } else {
                 EventsPerFlush = Integer.MAX_VALUE;
             }
@@ -238,30 +253,6 @@ public class PravegaPerfTest {
                 runtimeSec = 0;
             } else {
                 runtimeSec = MAXTIME;
-            }
-
-            if (commandline.hasOption("size")) {
-                messageSize = Integer.parseInt(commandline.getOptionValue("size"));
-            } else {
-                messageSize = 0;
-            }
-
-            if (commandline.hasOption("stream")) {
-                streamName = commandline.getOptionValue("stream");
-            } else {
-                streamName = null;
-            }
-
-            if (commandline.hasOption("scope")) {
-                scopeName = commandline.getOptionValue("scope");
-            } else {
-                scopeName = SCOPE;
-            }
-
-            if (commandline.hasOption("transactionspercommit")) {
-                transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
-            } else {
-                transactionPerCommit = 0;
             }
 
             if (commandline.hasOption("segments")) {
@@ -281,28 +272,11 @@ public class PravegaPerfTest {
             } else {
                 throughput = -1;
             }
-
-            if (commandline.hasOption("writecsv")) {
-                writeFile = commandline.getOptionValue("writecsv");
+            final int threadCount = producerCount + consumerCount + 6;
+            if (fork) {
+                executor = new ForkJoinPool(threadCount);
             } else {
-                writeFile = null;
-            }
-            if (commandline.hasOption("readcsv")) {
-                readFile = commandline.getOptionValue("readcsv");
-            } else {
-                readFile = null;
-            }
-
-            if (controllerUri == null) {
-                throw new IllegalArgumentException("Error: Must specify Controller IP address");
-            }
-
-            if (streamName == null) {
-                throw new IllegalArgumentException("Error: Must specify stream Name");
-            }
-
-            if (producerCount == 0 && consumerCount == 0) {
-                throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
+                executor = Executors.newFixedThreadPool(threadCount);
             }
 
             if (recreate) {
@@ -321,7 +295,7 @@ public class PravegaPerfTest {
                 if (writeAndRead) {
                     produceStats = null;
                 } else {
-                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
+                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile, executor);
                 }
 
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
@@ -346,7 +320,7 @@ public class PravegaPerfTest {
                 } else {
                     action = "Reading";
                 }
-                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile);
+                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile, executor);
                 eventsPerConsumer = events / consumerCount;
             } else {
                 consumeStats = null;
@@ -374,6 +348,10 @@ public class PravegaPerfTest {
             } catch (ExecutionException | InterruptedException ex) {
                 ex.printStackTrace();
             }
+        }
+
+        public ExecutorService getExecutor() {
+            return executor;
         }
 
         public abstract void closeReaderGroup();
@@ -470,6 +448,95 @@ public class PravegaPerfTest {
                 readerGroup.close();
             }
         }
-
     }
+
+    static private class KafkaTest extends Test {
+        final private Properties producerConfig;
+        final private Properties consumerConfig;
+
+        KafkaTest(long startTime, CommandLine commandline) throws
+                IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
+            super(startTime, commandline);
+            producerConfig = createProducerConfig();
+            consumerConfig = createConsumerConfig();
+        }
+
+        private Properties createProducerConfig() {
+            if (producerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ProducerConfig.ACKS_CONFIG, "all");
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+            // Enabling the producer IDEMPOTENCE is must to compare between Kafka and Pravega
+            props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+            return props;
+        }
+
+        private Properties createConsumerConfig() {
+            if (consumerCount < 1) {
+                return null;
+            }
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, controllerUri);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+            props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1);
+            // Enabling the consumer to READ_COMMITTED is must to compare between Kafka and Pravega
+            props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, IsolationLevel.READ_COMMITTED.name().toLowerCase(Locale.ROOT));
+            if (writeAndRead) {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, streamName);
+            } else {
+                props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+                props.put(ConsumerConfig.GROUP_ID_CONFIG, Long.toString(startTime));
+            }
+            return props;
+        }
+
+
+        public List<WriterWorker> getProducers() {
+            final List<WriterWorker> writers;
+
+            if (producerCount > 0) {
+                if (transactionPerCommit > 0) {
+                    throw new IllegalArgumentException("Kafka Transactions are not supported");
+                } else {
+                    writers = IntStream.range(0, producerCount)
+                            .boxed()
+                            .map(i -> new KafkaWriterWorker(i, eventsPerProducer,
+                                    EventsPerFlush, runtimeSec, false,
+                                    messageSize, startTime, produceStats,
+                                    streamName, eventsPerSec, writeAndRead, producerConfig))
+                            .collect(Collectors.toList());
+                }
+            } else {
+                writers = null;
+            }
+            return writers;
+        }
+
+        public List<ReaderWorker> getConsumers() throws URISyntaxException {
+            final List<ReaderWorker> readers;
+            if (consumerCount > 0) {
+                readers = IntStream.range(0, consumerCount)
+                        .boxed()
+                        .map(i -> new KafkaReaderWorker(i, eventsPerConsumer,
+                                runtimeSec, startTime, consumeStats,
+                                streamName, TIMEOUT, writeAndRead, consumerConfig))
+                        .collect(Collectors.toList());
+
+            } else {
+                readers = null;
+            }
+            return readers;
+        }
+
+        @Override
+        public void closeReaderGroup() {
+         }
+    }
+
 }
