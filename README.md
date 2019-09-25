@@ -49,7 +49,8 @@ Running Pravega benchmark tool locally:
 usage: pravega-benchmark
  -consumers <arg>                 Number of consumers
  -controller <arg>                Controller URI
- -enableConnectionPooling <arg>   enable connection pooling
+ -enableConnectionPooling <arg>   Set to false to disable connection
+                                  pooling
  -events <arg>                    Number of events/records if 'time' not
                                   specified;
                                   otherwise, Maximum events per second by
@@ -74,7 +75,7 @@ usage: pravega-benchmark
  -time <arg>                      Number of seconds the code runs
  -transactionspercommit <arg>     Number of events before a transaction is
                                   committed
- -writecsv <arg>                  CSV file to record write latencies```
+ -writecsv <arg>                  CSV file to record write latencies
 
 ## Running Performance benchmarking
 
