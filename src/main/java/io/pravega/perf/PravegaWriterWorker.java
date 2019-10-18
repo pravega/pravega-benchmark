@@ -28,6 +28,8 @@ public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<byte[]> producer;
 
     private final long writeWatermarkPeriodMillis;
+
+    // No guard is required for nextNoteTime because it is only used by one thread per instance.
     private long nextNoteTime = System.currentTimeMillis();
 
     /**
