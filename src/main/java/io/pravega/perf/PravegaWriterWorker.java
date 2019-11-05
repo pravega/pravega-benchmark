@@ -33,6 +33,7 @@ public class PravegaWriterWorker extends WriterWorker {
     private long nextNoteTime = System.currentTimeMillis();
 
     /**
+     * Construct a PravegaWriterWorker.
      *
      * @param writeWatermarkPeriodMillis If 0, noteTime will be called after every event.
      *                             If -1, noteTime will never be called.
