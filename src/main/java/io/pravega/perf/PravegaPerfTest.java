@@ -80,12 +80,12 @@ public class PravegaPerfTest {
         options.addOption("readcsv", true, "CSV file to record read latencies");
         options.addOption("enableConnectionPooling", true, "Set to false to disable connection pooling");
         options.addOption("writeWatermarkPeriodMillis", true,
-                "If -1, watermarks will not be written.\n" +
+                "If -1 (default), watermarks will not be written.\n" +
                 "If 0 and not using transactions, watermarks will be written after every event.\n" +
                 "If >0 and not using transactions, watermarks will be written with a period of this many milliseconds.\n" +
                 "If >= 0 and using transactions, watermarks will be written on each commit.");
         options.addOption("readWatermarkPeriodMillis", true,
-                "If -1, watermarks will not be read.\n" +
+                "If -1 (default), watermarks will not be read.\n" +
                 "If >0, watermarks will be read with a period of this many milliseconds.");
 
         options.addOption("help", false, "Help message");
