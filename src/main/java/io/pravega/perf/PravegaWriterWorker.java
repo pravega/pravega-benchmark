@@ -12,8 +12,8 @@ package io.pravega.perf;
 
 import java.util.concurrent.CompletableFuture;
 
+import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.EventStreamWriter;
-import io.pravega.client.ClientFactory;
 import io.pravega.client.stream.impl.ByteArraySerializer;
 import io.pravega.client.stream.EventWriterConfig;
 import org.slf4j.Logger;
@@ -27,11 +27,23 @@ public class PravegaWriterWorker extends WriterWorker {
 
     final EventStreamWriter<byte[]> producer;
 
+    private final long writeWatermarkPeriodMillis;
+
+    // No guard is required for nextNoteTime because it is only used by one thread per instance.
+    private long nextNoteTime = System.currentTimeMillis();
+
+    /**
+     * Construct a PravegaWriterWorker.
+     *
+     * @param writeWatermarkPeriodMillis If 0, noteTime will be called after every event.
+     *                             If -1, noteTime will never be called.
+     *                             If >0, noteTime will be called with a period of this many milliseconds.
+     */
     PravegaWriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
-                        boolean writeAndRead, ClientFactory factory,
-                        boolean enableConnectionPooling) {
+                        boolean writeAndRead, EventStreamClientFactory factory,
+                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis) {
 
         super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
@@ -42,6 +54,7 @@ public class PravegaWriterWorker extends WriterWorker {
                 EventWriterConfig.builder()
                         .enableConnectionPooling(enableConnectionPooling)
                         .build());
+        this.writeWatermarkPeriodMillis = writeWatermarkPeriodMillis;
     }
 
     @Override
@@ -52,12 +65,25 @@ public class PravegaWriterWorker extends WriterWorker {
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });
+        noteTimePeriodically();
         return time;
     }
 
     @Override
     public void writeData(byte[] data) {
         producer.writeEvent(data);
+        noteTimePeriodically();
+    }
+
+    private void noteTimePeriodically() {
+        if (writeWatermarkPeriodMillis >= 0) {
+            final long time = System.currentTimeMillis();
+            if (time > nextNoteTime) {
+                producer.noteTime(time);
+                log.debug("noteTimePeriodically: noteTime({})", time);
+                nextNoteTime += writeWatermarkPeriodMillis;
+            }
+        }
     }
 
     @Override

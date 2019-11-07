@@ -24,6 +24,9 @@ buildscript {
         mavenLocal()
         jcenter()
         mavenCentral()
+        maven {
+            url "https://oss.jfrog.org/jfrog-dependencies"
+        }
     }
 
     dependencies {
