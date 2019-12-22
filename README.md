@@ -114,8 +114,10 @@ This mode is used to find the maximum and throughput that can be obtained from t
 This mode can be used for both producers and consumers.
 
 ```
-For example:
-<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -time 60
+**For example:**
+
+&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  \
+     -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -time 60
 
 The -throughput -1  indicates the burst mode.
 This test will executed for 60 seconds because option -time 60 is used.
@@ -125,7 +127,7 @@ Note that -producers 1 indicates 1 producer/writers.
 
 in the case you want to write/read the certain number of events use the -events option without -time option as follows
 
-<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -events 1000000
+&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -events 1000000
 
 -events <number> indicates that total <number> of events to write/read
 ```
@@ -136,8 +138,9 @@ This mode is used to find the least latency that can be obtained from the Praveg
 This mode is used only for write operation.
 
 ```
-For example:
-<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 5   -size 100   -throughput 10   -time 300
+**For example:**
+
+&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 5   -size 100   -throughput 10   -time 300
 
 The -throughput <positive number>  indicates the Throughput mode.
 
@@ -150,7 +153,7 @@ Note that -producers 5 indicates 5 producers/writers .
 
 in the case you want to write/read the certain number of events use the -events option without -time option as follows
 
-<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 1  -size 100   -throughput 10   -events 1000000
+&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 1  -size 100   -throughput 10   -events 1000000
 
 -events 1000000 indicates that total 1000000 (1 million) of events will be written at the throughput speed of 10MB/sec
 ```
@@ -162,8 +165,9 @@ This mode is used to find the least latency  that can be obtained from the Prave
 This mode is used only for write operation.
 
 ```
-For example:
-<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 5  -size 100  -events 1000   -time 60
+**For example:**
+
+&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 5  -size 100  -events 1000   -time 60
 
 The -events <event numbers>  (1000 ) specifies the events per second to write.
 Note that the option "-throughput"  SHOULD NOT supplied for this OPS Mode or  Events Rate / Rate limiter Mode.
@@ -180,8 +184,9 @@ in this mode user must specify both the number of producers and consumers.
 The -throughput option (Throughput mode) or -events (late limiter) can used to limit the writers throughput or events rate.
 
 ```
-For example:
-<pravega benchmark directory>./run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname3  -segments 1  -producers 1 -consumers 1  -size 100  -throughput -1   -time 60
+**For example:**
+
+&lt;pravega benchmark directory>./run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname3  -segments 1  -producers 1 -consumers 1  -size 100  -throughput -1   -time 60
 
 The user should specify both producers and consumers count  for write to read or End to End latency mode. it should be set to true.
 The -throughput -1 specifies the writes tries to write the events at the maximum possible speed.
