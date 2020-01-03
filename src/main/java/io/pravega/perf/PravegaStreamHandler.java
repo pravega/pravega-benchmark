@@ -52,23 +52,31 @@ public class PravegaStreamHandler {
     ReaderGroupManager readerGroupManager;
     ReaderGroupConfig rdGrpConfig;
 
-    PravegaStreamHandler(String scope, String stream,
-                         String rdGrpName,
-                         String uri, int segs,
-                         int timeout, ControllerImpl contrl,
+    PravegaStreamHandler(String scope, String stream, String rdGrpName, String uri, int segments, int segmentScaleKBps,
+                         int segmentScaleEventsPerSecond, int scaleFactor, int timeout, ControllerImpl controller,
                          ScheduledExecutorService bgexecutor) throws Exception {
         this.scope = scope;
         this.stream = stream;
         this.rdGrpName = rdGrpName;
         this.controllerUri = uri;
-        this.controller = contrl;
-        this.segCount = segs;
+        this.controller = controller;
+        this.segCount = segments;
         this.timeout = timeout;
         this.bgexecutor = bgexecutor;
-        streamManager = StreamManager.create(new URI(uri));
-        streamManager.createScope(scope);
-        streamconfig = StreamConfiguration.builder()
-                .scalingPolicy(ScalingPolicy.fixed(segCount))
+        this.streamManager = StreamManager.create(new URI(uri));
+        this.streamManager.createScope(scope);
+
+        ScalingPolicy scalingPolicy = null;
+        if (segmentScaleEventsPerSecond == 0 && segmentScaleKBps == 0) {
+            scalingPolicy = ScalingPolicy.fixed(segCount);
+        } else if (segmentScaleKBps > 0) {
+            scalingPolicy = ScalingPolicy.byDataRate(segmentScaleKBps, scaleFactor, segCount);
+        } else if (segmentScaleEventsPerSecond > 0) {
+            scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
+        }
+
+        this.streamconfig = StreamConfiguration.builder()
+                .scalingPolicy(scalingPolicy)
                 .build();
     }
 

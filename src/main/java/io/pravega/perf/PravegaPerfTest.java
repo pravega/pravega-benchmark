@@ -69,7 +69,13 @@ public class PravegaPerfTest {
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
         options.addOption("segments", true, "Number of segments");
-        options.addOption("size", true, "Size of each message (event or record)");
+        options.addOption("segmentScaleKBps", true, "Setting this option enables Stream auto-scaling." +
+                "This option tells the throughput in KBps that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
+        options.addOption("segmentScaleEventsPerSecond", true, "Setting this option enables Stream auto-scaling." +
+                "This option tells the throughput in events/second that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
+        options.addOption("scaleFactor", true, "If the scale policy is configured, this parameter defines the number of new segments" +
+                "to be created once Pravega determines to split a segment.");
+                options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("recreate", true,
                 "If the stream is already existing, delete and recreate the same");
         options.addOption("throughput", true,
@@ -188,6 +194,9 @@ public class PravegaPerfTest {
         final int producerCount;
         final int consumerCount;
         final int segmentCount;
+        final int segmentScaleKBps;
+        final int segmentScaleEventsPerSecond;
+        final int scaleFactor;
         final int events;
         final int eventsPerSec;
         final int eventsPerProducer;
@@ -207,29 +216,11 @@ public class PravegaPerfTest {
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
-            if (commandline.hasOption("controller")) {
-                controllerUri = commandline.getOptionValue("controller");
-            } else {
-                controllerUri = null;
-            }
 
-            if (commandline.hasOption("producers")) {
-                producerCount = Integer.parseInt(commandline.getOptionValue("producers"));
-            } else {
-                producerCount = 0;
-            }
-
-            if (commandline.hasOption("consumers")) {
-                consumerCount = Integer.parseInt(commandline.getOptionValue("consumers"));
-            } else {
-                consumerCount = 0;
-            }
-
-            if (commandline.hasOption("events")) {
-                events = Integer.parseInt(commandline.getOptionValue("events"));
-            } else {
-                events = 0;
-            }
+            controllerUri = parseStringOption(commandline, "controller", null);
+            producerCount = parseIntOption(commandline, "producers", 0);
+            consumerCount = parseIntOption(commandline, "consumers", 0);
+            events = parseIntOption(commandline, "events", 0);
 
             if (commandline.hasOption("flush")) {
                 int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
@@ -250,35 +241,14 @@ public class PravegaPerfTest {
                 runtimeSec = MAXTIME;
             }
 
-            if (commandline.hasOption("size")) {
-                messageSize = Integer.parseInt(commandline.getOptionValue("size"));
-            } else {
-                messageSize = 0;
-            }
-
-            if (commandline.hasOption("stream")) {
-                streamName = commandline.getOptionValue("stream");
-            } else {
-                streamName = null;
-            }
-
-            if (commandline.hasOption("scope")) {
-                scopeName = commandline.getOptionValue("scope");
-            } else {
-                scopeName = SCOPE;
-            }
-
-            if (commandline.hasOption("transactionspercommit")) {
-                transactionPerCommit = Integer.parseInt(commandline.getOptionValue("transactionspercommit"));
-            } else {
-                transactionPerCommit = 0;
-            }
-
-            if (commandline.hasOption("segments")) {
-                segmentCount = Integer.parseInt(commandline.getOptionValue("segments"));
-            } else {
-                segmentCount = producerCount;
-            }
+            messageSize = parseIntOption(commandline, "size", 0);
+            streamName = parseStringOption(commandline, "stream", null);
+            scopeName = parseStringOption(commandline, "scope", SCOPE);
+            transactionPerCommit = parseIntOption(commandline, "transactionspercommit", 0);
+            segmentCount = parseIntOption(commandline, "segments", producerCount);
+            segmentScaleKBps = parseIntOption(commandline, "segmentScaleKBps", 0);
+            segmentScaleEventsPerSecond = parseIntOption(commandline, "segmentScaleEventsPerSecond", 0);
+            scaleFactor = parseIntOption(commandline, "scaleFactor", 2);
 
             if (commandline.hasOption("recreate")) {
                 recreate = Boolean.parseBoolean(commandline.getOptionValue("recreate"));
@@ -292,16 +262,8 @@ public class PravegaPerfTest {
                 throughput = -1;
             }
 
-            if (commandline.hasOption("writecsv")) {
-                writeFile = commandline.getOptionValue("writecsv");
-            } else {
-                writeFile = null;
-            }
-            if (commandline.hasOption("readcsv")) {
-                readFile = commandline.getOptionValue("readcsv");
-            } else {
-                readFile = null;
-            }
+            writeFile = parseStringOption(commandline, "writecsv", null);
+            readFile = parseStringOption(commandline, "readcsv", null);
 
             enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
@@ -318,6 +280,12 @@ public class PravegaPerfTest {
 
             if (producerCount == 0 && consumerCount == 0) {
                 throw new IllegalArgumentException("Error: Must specify the number of producers or Consumers");
+            }
+
+            if (segmentScaleEventsPerSecond < 0 || segmentScaleKBps < 0 || scaleFactor < 0) {
+                throw new IllegalArgumentException("Error: Invalid values for Stream scaling policy (cannot be negative).");
+            } else if (segmentScaleEventsPerSecond > 0 && segmentScaleKBps > 0) {
+                throw new IllegalArgumentException("Error: You can specify only one type of scaling policy in a Stream (either event rate or data rate).");
             }
 
             if (recreate) {
@@ -397,6 +365,22 @@ public class PravegaPerfTest {
 
         public abstract List<ReaderWorker> getConsumers() throws URISyntaxException;
 
+        private int parseIntOption(CommandLine commandline, String option, int defaultValue) {
+            if (commandline.hasOption(option)) {
+                return Integer.parseInt(commandline.getOptionValue(option));
+            } else {
+                return defaultValue;
+            }
+        }
+
+        private String parseStringOption(CommandLine commandline, String option, String defaultValue) {
+            if (commandline.hasOption(option)) {
+                return String.valueOf(commandline.getOptionValue(option));
+            } else {
+                return defaultValue;
+            }
+        }
+
     }
 
     static private class PravegaTest extends Test {
@@ -404,19 +388,16 @@ public class PravegaPerfTest {
         final EventStreamClientFactory factory;
         final ReaderGroup readerGroup;
 
-        PravegaTest(long startTime, CommandLine commandline) throws
-                IllegalArgumentException, URISyntaxException, InterruptedException, Exception {
+        PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
             final ScheduledExecutorService bgExecutor = Executors.newScheduledThreadPool(10);
             final ControllerImpl controller = new ControllerImpl(ControllerImplConfig.builder()
-                    .clientConfig(ClientConfig.builder()
-                            .controllerURI(new URI(controllerUri)).build())
+                    .clientConfig(ClientConfig.builder().controllerURI(new URI(controllerUri)).build())
                     .maxBackoffMillis(5000).build(),
                     bgExecutor);
 
-            streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri,
-                    segmentCount, TIMEOUT, controller,
-                    bgExecutor);
+            streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
+                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor);
 
             if (producerCount > 0 && !streamHandle.create()) {
                 if (recreate) {
