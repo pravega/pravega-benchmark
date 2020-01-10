@@ -93,7 +93,7 @@ usage: pravega-benchmark
                                      If >= 0 and using transactions,
                                      watermarks will be written on each
                                      commit.
-
+```
 ## Running Performance benchmarking
 
 The Pravega benchmark tool can be executed to
@@ -101,7 +101,7 @@ The Pravega benchmark tool can be executed to
  - write/read the events/records for the specified amount of time
 
 The Pravega benchmark tool can be executed in the following modes:
-```
+
 1. Burst Mode
 2. Throughput Mode
 3. OPS Mode or  Events Rate / Rate limiter Mode
