@@ -19,7 +19,6 @@ At the end of the performance benchmarking, this tool outputs the 50th, 75th, 95
 ### Prerequisites
 
 - Java 8+
-- Gradle 4+
 
 ### Building
 
