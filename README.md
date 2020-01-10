@@ -106,57 +106,81 @@ The Pravega benchmark tool can be executed in the following modes:
 2. Throughput Mode
 3. OPS Mode or  Events Rate / Rate limiter Mode
 4. End to End Latency Mode
-```
 
 ### 1 - Burst Mode
 In this mode, the Pravega benchmark tool pushes/pulls the messages to/from the Pravega client as much as possible.
 This mode is used to find the maximum and throughput that can be obtained from the Pravega cluster.
 This mode can be used for both producers and consumers.
 
+For example:
+```bash
+<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  \
+    -controller tcp://127.0.0.1:9090  \
+    -stream streamname1 \ 
+    -segments 1 \
+    -producers 1 \
+    -size 100 \
+    -throughput -1  \ 
+    -time 60
 ```
-**For example:**
-
-&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  \
-     -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -time 60
-
-The -throughput -1  indicates the burst mode.
-This test will executed for 60 seconds because option -time 60 is used.
+The `-throughput -1`  indicates the burst mode.
+This test will executed for 60 seconds because option `-time 60` is used.
 This test tries to write and read events of size 100 bytes to/from the stream 'streamname1'.
-The option '-controller tcp://127.0.0.1:9090' specifies the pravega controller IP address and port number.
+The option `-controller tcp://127.0.0.1:9090` specifies the pravega controller IP address and port number.
 Note that -producers 1 indicates 1 producer/writers.
 
-in the case you want to write/read the certain number of events use the -events option without -time option as follows
+in the case you want to write/read the certain number of events use the `-events` option without `-time` option as follows
 
-&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 1  -size 100   -throughput -1   -events 1000000
-
--events <number> indicates that total <number> of events to write/read
+```bash
+<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark \
+    -controller tcp://127.0.0.1:9090 \
+    -stream streamname1 \
+    -segments 1 \
+    -producers 1 \
+    -size 100 \
+    -throughput -1 \ 
+    -events 1000000
 ```
+`-events <number>` indicates that total <number> of events to write/read
 
 ### 2 - Throughput Mode
 In this mode, the Pravega benchmark tool pushes the messages to the Pravega client with specified approximate maximum throughput in terms of Mega Bytes/second (MB/s).
 This mode is used to find the least latency that can be obtained from the Pravega cluster for given throughput.
 This mode is used only for write operation.
 
+For example:
+```bash
+<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark \
+    -controller tcp://127.0.0.1:9090 \
+    -stream streamname5 \
+    -segments 5 \
+    -producers 5 \  
+    -size 100 \
+    -throughput 10 \
+    -time 300
 ```
-**For example:**
-
-&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 5   -size 100   -throughput 10   -time 300
-
-The -throughput <positive number>  indicates the Throughput mode.
+The `-throughput <positive number>`  indicates the Throughput mode.
 
 This test will be executed with approximate max throughput of 10MB/sec.
-This test will executed for 300 seconds (5 minutes) because option -time 60 is used.
+This test will executed for 300 seconds (5 minutes) because option `-time 60` is used.
 This test tries to write and read events of size 100 bytes to/from the stream 'streamname5' of 5 segments.
 If the stream 'streamname5' is not existing , then it will be created with the 5 segments.
 if the steam is already existing then it will be scaled up/down to 5 segments.
-Note that -producers 5 indicates 5 producers/writers .
+Note that `-producers 5` indicates 5 producers/writers .
 
-in the case you want to write/read the certain number of events use the -events option without -time option as follows
+in the case you want to write/read the certain number of events use the `-events` option without `-time` option as follows:
 
-&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname5  -segments 5  -producers 1  -size 100   -throughput 10   -events 1000000
-
--events 1000000 indicates that total 1000000 (1 million) of events will be written at the throughput speed of 10MB/sec
+```bash
+<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark \
+    -controller tcp://127.0.0.1:9090 \
+    -stream streamname5 \
+    -segments 5 \
+    -producers 1 \
+    -size 100 \
+    -throughput 10 \
+    -events 1000000
 ```
+`-events 1000000` indicates that total 1000000 (1 million) of events will be written at the throughput speed of 10MB/sec
 
 ### 3 - OPS Mode or  Events Rate / Rate Limiter Mode
 This mode is another form of controlling writers throughput by limiting the number of events per second.
@@ -164,18 +188,23 @@ In this mode, the Pravega benchmark tool pushes the messages to the Pravega clie
 This mode is used to find the least latency  that can be obtained from the Pravega cluster for events rate.
 This mode is used only for write operation.
 
+For example:
+```bash
+<pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark \
+    -controller tcp://127.0.0.1:9090 \
+    -stream streamname1 \
+    -segments 1 \
+    -producers 5 \
+    -size 100 \
+    -events 1000 \
+    -time 60
 ```
-**For example:**
-
-&lt;pravega benchmark directory>/run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname1  -segments 1  -producers 5  -size 100  -events 1000   -time 60
-
-The -events <event numbers>  (1000 ) specifies the events per second to write.
-Note that the option "-throughput"  SHOULD NOT supplied for this OPS Mode or  Events Rate / Rate limiter Mode.
+The `-events <event numbers>`  (1000 ) specifies the events per second to write.
+Note that the option `-throughput`  SHOULD NOT supplied for this OPS Mode or  Events Rate / Rate limiter Mode.
 
 This test will be executed with approximate 1000 events per second by 6 producers.
-This test will executed for 300 seconds (5 minutes) because option -time 60 is used.
+This test will executed for 300 seconds (5 minutes) because option `-time 60` is used.
 Note that in this mode, there is 'NO total number of events' to specify hence user must supply the time to run using -time option.
-```
 
 ### 4 - End to End Latency Mode
 In this mode, the Pravega benchmark tool writes and read the messages to the Pravega cluster and records the end to end latency.
@@ -183,30 +212,35 @@ End to end latency means the time duration between the beginning of the writing 
 in this mode user must specify both the number of producers and consumers.
 The -throughput option (Throughput mode) or -events (late limiter) can used to limit the writers throughput or events rate.
 
+For example:
+```bash
+<pravega benchmark directory>./run/pravega-benchmark/bin/pravega-benchmark \
+    -controller tcp://127.0.0.1:9090  \
+    -stream streamname3  \
+    -segments 1  \
+    -producers 1 -consumers 1  \
+    -size 100 \
+    -throughput -1 \
+    -time 60
 ```
-**For example:**
-
-&lt;pravega benchmark directory>./run/pravega-benchmark/bin/pravega-benchmark  -controller tcp://127.0.0.1:9090  -stream streamname3  -segments 1  -producers 1 -consumers 1  -size 100  -throughput -1   -time 60
-
 The user should specify both producers and consumers count  for write to read or End to End latency mode. it should be set to true.
-The -throughput -1 specifies the writes tries to write the events at the maximum possible speed.
-```
+The `-throughput -1` specifies the writes tries to write the events at the maximum possible speed.
 
 ### Recording the latencies to CSV files
-User can use the options "-writecsv  <file name>" to record the latencies of writers and "-readcsv <file name>" for readers.
-in case of End to End latency mode, if the user can supply only -readcsv to get the end to end latency in to the csv file.
+User can use the options `-writecsv  <file name>` to record the latencies of writers and `-readcsv <file name>` for readers.
+in case of End to End latency mode, if the user can supply only `-readcsv` to get the end to end latency in to the csv file.
 
 ## Running in Docker
 
 Build and push the Docker image to your repo.
-```
+```bash
 export DOCKER_REPOSITORY=<your Docker user name>
 export IMAGE_TAG=latest
 scripts/build-docker.sh
 ```
 
 Sample command to run in Docker:
-```
+```bash
 docker run --rm -it \
 --network host \
 ${DOCKER_REPOSITORY}/pravega-benchmark:${IMAGE_TAG} \
@@ -224,7 +258,7 @@ when built the Docker image.
 You must change the Pravega controller URI.
 You may also set other parameters as desired.
 
-```
+```bash
 export NAMESPACE=examples
 scripts/pravega-benchmark-k8s.sh.
 ```
