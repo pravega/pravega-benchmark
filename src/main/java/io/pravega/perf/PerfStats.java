@@ -11,11 +11,15 @@ package io.pravega.perf;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -24,6 +28,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,8 +42,11 @@ import javax.annotation.concurrent.NotThreadSafe;
 public class PerfStats {
     private static Logger log = LoggerFactory.getLogger(PerfStats.class);
 
+    private static final double[] PERCENTILES = {0.5, 0.75, 0.95, 0.99, 0.999, 0.9999};
+
     final private String action;
     final private String csvFile;
+    final private String throughputCsvFile;
     final private int messageSize;
     final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
@@ -70,11 +78,12 @@ public class PerfStats {
         }
     }
 
-    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
+    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile, String throughputCsvFile) {
         this.action = action;
         this.messageSize = messageSize;
         this.windowInterval = reportingInterval;
         this.csvFile = csvFile;
+        this.throughputCsvFile = throughputCsvFile;
         this.queue = new ConcurrentLinkedQueue<>();
         this.executor = new ForkJoinPool(1);
         this.ret = null;
@@ -98,12 +107,16 @@ public class PerfStats {
             final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
+            final ThroughtputWriter throughputRecorder = throughputCsvFile == null ? new ThroughtputWriter(action, messageSize, startTime) :
+                    new CSVThroughputWriter(action, messageSize, startTime, throughputCsvFile);
             final int minWaitTimeMS = windowInterval / 50;
             final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
             long idleCount = 0;
             TimeStamp t;
+
+            throughputRecorder.start();
 
             while (doWork) {
                 t = queue.poll();
@@ -114,6 +127,7 @@ public class PerfStats {
                         final int latency = (int) (t.endTime - t.startTime);
                         window.record(t.bytes, latency);
                         latencyRecorder.record(t.startTime, t.bytes, latency);
+                        throughputRecorder.record(t.bytes);
                     }
                     time = t.endTime;
                     if (window.windowTimeMS(time) > windowInterval) {
@@ -133,7 +147,11 @@ public class PerfStats {
                     }
                 }
             }
+
+            throughputRecorder.stop();
+
             latencyRecorder.printTotal(time);
+            throughputRecorder.printTotal(time);
             return null;
         }
     }
@@ -188,7 +206,7 @@ public class PerfStats {
             final double recsPerSec = count / elapsed;
             final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
 
-            log.info(String.format("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
+            log.info(String.format("%,8d records %s, %,9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency));
         }
 
@@ -202,12 +220,133 @@ public class PerfStats {
         }
     }
 
+    /***
+     * Perf Recorder that records the number of bytes every second.  Percentiles are reported in human form, i.e. MB/s
+     */
+    @NotThreadSafe
+    static private class ThroughtputWriter {
+        final String action;
+        final int messageSize;
+        final long startTime;
+        final List<Long> throughputs;
+        long count;
+        @GuardedBy("LOCk")
+        long seconds;
+        @GuardedBy("LOCk")
+        long totalBytesInSecond;
+        long totalBytes;
+
+        final ScheduledExecutorService scheduler;
+
+        private final Object LOCk = new Object();
+
+        ThroughtputWriter(String action, int messageSize, long startTime) {
+            this.action = action;
+            this.messageSize = messageSize;
+            this.startTime = startTime;
+            this.throughputs = new ArrayList<>();
+            this.count = 0;
+
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+
+        public void start() {
+            scheduler.scheduleAtFixedRate(this::recordSecondThroughput, 1, 1, TimeUnit.SECONDS);
+        }
+
+        public void stop() {
+            scheduler.shutdownNow();
+        }
+
+        public void recordSecondThroughput() {
+            synchronized (LOCk) {
+                recordThroughput(seconds, totalBytesInSecond);
+
+                totalBytesInSecond = 0;
+                seconds++;
+            }
+        }
+
+        public void recordThroughput(long seconds, long throughputBytes) {
+            throughputs.add(totalBytesInSecond);
+        }
+
+        private String[] getPercentiles() {
+            String[] values = new String[PERCENTILES.length];
+
+            throughputs.sort(Long::compareTo);
+
+            for (int i = 0; i < PERCENTILES.length; i++) {
+                int percentileIndex = (int) (throughputs.size() * PERCENTILES[i]);
+                long bytes = throughputs.get(percentileIndex);
+
+                values[i] = FileUtils.byteCountToDisplaySize(bytes);
+            }
+
+            return values;
+        }
+
+        public void record(int bytes) {
+            synchronized (LOCk) {
+                totalBytesInSecond +=bytes;
+            }
+            totalBytes+=bytes;
+            count++;
+        }
+
+        public void printTotal(long endTime) {
+            final double elapsed = (endTime - startTime) / 1000.0;
+            final double recsPerSec = count / elapsed;
+            String[] percs = getPercentiles();
+
+            log.info(String.format(
+                "throughput: %,d records %s, %,.3f records/sec, %d bytes record size, %s total data" +
+                    ", %s/s 50th, %s/s 75th, %s/s 95th, %s/s 99th, %s/s 99.9th, %s/s 99.99th.",
+                count, action, recsPerSec, messageSize, FileUtils.byteCountToDisplaySize(totalBytes),
+                percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]));
+        }
+    }
+
+    /***
+     * Perf recorder that writes the number of bytes recorded every second to a CSV file.
+     */
+     @NotThreadSafe
+    static private class CSVThroughputWriter extends ThroughtputWriter {
+        final private String csvFile;
+        final private CSVPrinter csvPrinter;
+
+        CSVThroughputWriter(String action, int messageSize, long startTime, String csvFile) throws IOException {
+            super(action, messageSize, startTime);
+            this.csvFile = csvFile + "-throughput.csv";
+            csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
+                .withHeader("second", action + " Throughput (bytes)"));
+        }
+
+        @Override
+        public void recordThroughput(long seconds, long throughputBytes) {
+            super.recordThroughput(seconds, throughputBytes);
+            try {
+                csvPrinter.printRecord(seconds, throughputBytes);
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        public void printTotal(long endTime) {
+            try {
+                csvPrinter.close();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+            super.printTotal(endTime);
+        }
+    }
+
     @NotThreadSafe
     static private class LatencyWriter {
         final static int MS_PER_SEC = 1000;
         final static int MS_PER_MIN = MS_PER_SEC * 60;
         final static int MS_PER_HR = MS_PER_MIN * 60;
-        final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999, 0.9999};
         final String action;
         final int messageSize;
         final long startTime;
@@ -244,12 +383,12 @@ public class PerfStats {
         }
 
         private int[] getPercentiles() {
-            int[] percentileIds = new int[percentiles.length];
+            int[] percentileIds = new int[PERCENTILES.length];
             int[] values = new int[percentileIds.length];
             int index = 0;
 
-            for (int i = 0; i < percentiles.length; i++) {
-                percentileIds[i] = (int) (count * percentiles[i]);
+            for (int i = 0; i < PERCENTILES.length; i++) {
+                percentileIds[i] = (int) (count * PERCENTILES[i]);
             }
 
             for (int[] lr : latencyRanges) {
@@ -279,7 +418,7 @@ public class PerfStats {
             int[] percs = getPercentiles();
 
             log.info(String.format(
-                    "%d records %s, %.3f records/sec, %d bytes record size, %.2f MiB/sec, %.1f ms avg latency, %.1f ms max latency" +
+                    "%,d records %s, %,.3f records/sec, %d bytes record size, %.2f MiB/sec, %.1f ms avg latency, %.1f ms max latency" +
                             ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th, %d ms 99.99th.",
                     count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
                     percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]));
@@ -293,7 +432,7 @@ public class PerfStats {
 
         CSVLatencyWriter(String action, int messageSize, long start, String csvFile) throws IOException {
             super(action, messageSize, start);
-            this.csvFile = csvFile;
+            this.csvFile = csvFile + "-latency.csv";;
             csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
                     .withHeader("Start Time (Milliseconds)", "event size (bytes)", action + " Latency (Milliseconds)"));
         }

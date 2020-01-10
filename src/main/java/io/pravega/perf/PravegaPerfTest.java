@@ -78,6 +78,8 @@ public class PravegaPerfTest {
                         "if -1, get the maximum throughput");
         options.addOption("writecsv", true, "CSV file to record write latencies");
         options.addOption("readcsv", true, "CSV file to record read latencies");
+        options.addOption("writethroughputcsv", true, "CSV file to record write throughput");
+        options.addOption("readthroughputcsv", true, "CSV file to record read throughput");
         options.addOption("enableConnectionPooling", true, "Set to false to disable connection pooling");
         options.addOption("writeWatermarkPeriodMillis", true,
                 "If -1 (default), watermarks will not be written.\n" +
@@ -198,6 +200,8 @@ public class PravegaPerfTest {
         final double throughput;
         final String writeFile;
         final String readFile;
+        final String writeThroughputFile;
+        final String readThroughputFile;
         final PerfStats produceStats;
         final PerfStats consumeStats;
         final long startTime;
@@ -303,6 +307,17 @@ public class PravegaPerfTest {
                 readFile = null;
             }
 
+            if (commandline.hasOption("writethroughputcsv")) {
+                writeThroughputFile = commandline.getOptionValue("writethroughputcsv");
+            } else {
+                writeThroughputFile = null;
+            }
+            if (commandline.hasOption("readthroughputcsv")) {
+                readThroughputFile = commandline.getOptionValue("readthroughputcsv");
+            } else {
+                readThroughputFile = null;
+            }
+
             enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
             writeWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("writeWatermarkPeriodMillis", "-1"));
@@ -336,7 +351,7 @@ public class PravegaPerfTest {
                 if (writeAndRead) {
                     produceStats = null;
                 } else {
-                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile);
+                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile, writeThroughputFile);
                 }
 
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
@@ -361,7 +376,7 @@ public class PravegaPerfTest {
                 } else {
                     action = "Reading";
                 }
-                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile);
+                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile, readThroughputFile);
                 eventsPerConsumer = events / consumerCount;
             } else {
                 consumeStats = null;
