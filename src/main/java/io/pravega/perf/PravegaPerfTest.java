@@ -50,7 +50,6 @@ public class PravegaPerfTest {
         final HelpFormatter formatter = new HelpFormatter();
         final CommandLineParser parser;
         CommandLine commandline = null;
-        Option opt = null;
         final long startTime = System.currentTimeMillis();
 
         options.addOption("controller", true, "Controller URI");
@@ -75,7 +74,7 @@ public class PravegaPerfTest {
                 "This option tells the throughput in events/second that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
         options.addOption("scaleFactor", true, "If the scale policy is configured, this parameter defines the number of new segments" +
                 "to be created once Pravega determines to split a segment.");
-                options.addOption("size", true, "Size of each message (event or record)");
+        options.addOption("size", true, "Size of each message (event or record)");
         options.addOption("recreate", true,
                 "If the stream is already existing, delete and recreate the same");
         options.addOption("throughput", true,
