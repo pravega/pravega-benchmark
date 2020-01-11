@@ -68,10 +68,10 @@ public class PravegaPerfTest {
         options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
-        options.addOption("segments", true, "Number of segments");
-        options.addOption("segmentScaleKBps", true, "Setting this option enables Stream auto-scaling." +
+        options.addOption("segments", true, "Number of segments. If Stream auto-scaling is enabled, this is the initial number of segments.");
+        options.addOption("segmentScaleKBps", true, "Setting this option enables Stream auto-scaling. " +
                 "This option tells the throughput in KBps that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
-        options.addOption("segmentScaleEventsPerSecond", true, "Setting this option enables Stream auto-scaling." +
+        options.addOption("segmentScaleEventsPerSecond", true, "Setting this option enables Stream auto-scaling. " +
                 "This option tells the throughput in events/second that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
         options.addOption("scaleFactor", true, "If the scale policy is configured, this parameter defines the number of new segments" +
                 "to be created once Pravega determines to split a segment.");
