@@ -11,8 +11,10 @@
 package io.pravega.perf;
 
 import java.net.URI;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterators;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -21,7 +23,12 @@ import java.util.stream.IntStream;
 import java.net.URISyntaxException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.StreamSupport;
 
+import com.google.common.collect.Streams;
+import io.pravega.client.BatchClientFactory;
+import io.pravega.client.batch.SegmentRange;
+import io.pravega.client.stream.StreamCut;
 import io.pravega.client.stream.impl.ControllerImpl;
 import io.pravega.client.admin.StreamManager;
 import io.pravega.client.stream.StreamConfiguration;
@@ -139,6 +146,8 @@ public class PravegaStreamHandler {
         }
     }
 
+
+
     ReaderGroup createReaderGroup(boolean reset) throws URISyntaxException {
         if (readerGroupManager == null) {
             readerGroupManager = ReaderGroupManager.withScope(scope,
@@ -152,6 +161,18 @@ public class PravegaStreamHandler {
             rdGroup.resetReaderGroup(rdGrpConfig);
         }
         return rdGroup;
+    }
+
+    public BatchClientFactory newBatchClientFactory() {
+        ClientConfig clientConfig = ClientConfig.builder().controllerURI(URI.create(controllerUri)).build();
+        return BatchClientFactory.withScope(scope, clientConfig);
+    }
+
+    public List<SegmentRange> getBatchSegmentRanges(BatchClientFactory batchFactory) {
+        Iterator<SegmentRange> segmentRangeIterator = batchFactory.getSegments(Stream.of(scope, stream), StreamCut.UNBOUNDED, StreamCut.UNBOUNDED)
+            .getIterator();
+
+        return Streams.stream(segmentRangeIterator).collect(Collectors.toList());
     }
 
     void deleteReaderGroup() {
