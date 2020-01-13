@@ -11,15 +11,11 @@ package io.pravega.perf;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -28,7 +24,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.io.FileUtils;
+import org.apache.commons.math3.util.Precision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,25 +94,25 @@ public class PerfStats {
         final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
         final private static int PARK_NS = NS_PER_MICRO;
         final private long startTime;
+        final TimeWindow window;
+        CSVThroughputWriter throughputRecorder;
 
-        private QueueProcessor(long startTime) {
+        private QueueProcessor(long startTime){
             this.startTime = startTime;
+            window = new TimeWindow(action, startTime);
         }
 
         public Void call() throws IOException {
-            final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
-            final ThroughtputWriter throughputRecorder = throughputCsvFile == null ? new ThroughtputWriter(action, messageSize, startTime) :
-                    new CSVThroughputWriter(action, messageSize, startTime, throughputCsvFile);
             final int minWaitTimeMS = windowInterval / 50;
             final long totalIdleCount = (NS_PER_MS / PARK_NS) * minWaitTimeMS;
             boolean doWork = true;
             long time = startTime;
             long idleCount = 0;
-            TimeStamp t;
 
-            throughputRecorder.start();
+            throughputRecorder = throughputCsvFile != null ? new CSVThroughputWriter(action, throughputCsvFile) : null;
+            TimeStamp t;
 
             while (doWork) {
                 t = queue.poll();
@@ -126,13 +122,12 @@ public class PerfStats {
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
                         window.record(t.bytes, latency);
+
                         latencyRecorder.record(t.startTime, t.bytes, latency);
-                        throughputRecorder.record(t.bytes);
                     }
                     time = t.endTime;
                     if (window.windowTimeMS(time) > windowInterval) {
-                        window.print(time);
-                        window.reset(time);
+                        resetWindow(time);
                     }
                 } else {
                     LockSupport.parkNanos(PARK_NS);
@@ -141,18 +136,28 @@ public class PerfStats {
                         time = System.currentTimeMillis();
                         idleCount = 0;
                         if (window.windowTimeMS(time) > windowInterval) {
-                            window.print(time);
-                            window.reset(time);
+                            resetWindow(time);
                         }
                     }
                 }
             }
 
-            throughputRecorder.stop();
-
             latencyRecorder.printTotal(time);
-            throughputRecorder.printTotal(time);
+            if (throughputRecorder != null) {
+                throughputRecorder.close();
+            }
             return null;
+        }
+
+        private final void resetWindow(long time) {
+            window.lastTime(time);
+
+            if (throughputRecorder != null) {
+                throughputRecorder.record(window.startTime, window.lastTime, window.bytes, window.getMBPerSecond(), window.count, window.getEventsPerSecond());
+            }
+
+            window.print();
+            window.reset(time);
         }
     }
 
@@ -168,6 +173,7 @@ public class PerfStats {
         private long bytes;
         private int maxLatency;
         private long totalLatency;
+        private double elapsedSeconds = 0;
 
         private TimeWindow(String action, long start) {
             this.action = action;
@@ -181,6 +187,7 @@ public class PerfStats {
             this.bytes = 0;
             this.maxLatency = 0;
             this.totalLatency = 0;
+            this.elapsedSeconds = 0;
         }
 
         /**
@@ -196,17 +203,34 @@ public class PerfStats {
             this.maxLatency = Math.max(this.maxLatency, latency);
         }
 
+        public void lastTime(long time) {
+            this.lastTime = time;
+
+            assert this.lastTime > this.startTime : "Invalid Start and EndTime";
+            this.elapsedSeconds = (this.lastTime - this.startTime) / 1000.0;
+        }
+
+        public double getMBPerSecond() {
+            assert this.elapsedSeconds > 0 : "Elapsed Seconds cannot be zero";
+
+            return (this.bytes / (1024.0 * 1024.0)) / elapsedSeconds;
+        }
+
+        public double getEventsPerSecond() {
+            assert this.elapsedSeconds > 0 : "Elapsed Seconds cannot be zero";
+
+            return count/elapsedSeconds;
+        }
+
         /**
          * Print the window statistics
          */
-        private void print(long time) {
-            this.lastTime = time;
+        private void print() {
             assert this.lastTime > this.startTime : "Invalid Start and EndTime";
-            final double elapsed = (this.lastTime - this.startTime) / 1000.0;
-            final double recsPerSec = count / elapsed;
-            final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+            final double recsPerSec = count / elapsedSeconds;
+            final double mbPerSec = getMBPerSecond();
 
-            log.info(String.format("%,8d records %s, %,9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
+            log.info(String.format("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency));
         }
 
@@ -224,121 +248,28 @@ public class PerfStats {
      * Perf Recorder that records the number of bytes every second.  Percentiles are reported in human form, i.e. MB/s
      */
     @NotThreadSafe
-    static private class ThroughtputWriter {
-        final String action;
-        final int messageSize;
-        final long startTime;
-        final List<Long> throughputs;
-        long count;
-        @GuardedBy("LOCk")
-        long seconds;
-        @GuardedBy("LOCk")
-        long totalBytesInSecond;
-        long totalBytes;
-
-        final ScheduledExecutorService scheduler;
-
-        private final Object LOCk = new Object();
-
-        ThroughtputWriter(String action, int messageSize, long startTime) {
-            this.action = action;
-            this.messageSize = messageSize;
-            this.startTime = startTime;
-            this.throughputs = new ArrayList<>();
-            this.count = 0;
-
-            scheduler = Executors.newSingleThreadScheduledExecutor();
-        }
-
-        public void start() {
-            scheduler.scheduleAtFixedRate(this::recordSecondThroughput, 1, 1, TimeUnit.SECONDS);
-        }
-
-        public void stop() {
-            scheduler.shutdownNow();
-        }
-
-        public void recordSecondThroughput() {
-            synchronized (LOCk) {
-                recordThroughput(seconds, totalBytesInSecond);
-
-                totalBytesInSecond = 0;
-                seconds++;
-            }
-        }
-
-        public void recordThroughput(long seconds, long throughputBytes) {
-            throughputs.add(totalBytesInSecond);
-        }
-
-        private String[] getPercentiles() {
-            String[] values = new String[PERCENTILES.length];
-
-            throughputs.sort(Long::compareTo);
-
-            for (int i = 0; i < PERCENTILES.length; i++) {
-                int percentileIndex = (int) (throughputs.size() * PERCENTILES[i]);
-                long bytes = throughputs.get(percentileIndex);
-
-                values[i] = FileUtils.byteCountToDisplaySize(bytes);
-            }
-
-            return values;
-        }
-
-        public void record(int bytes) {
-            synchronized (LOCk) {
-                totalBytesInSecond +=bytes;
-            }
-            totalBytes+=bytes;
-            count++;
-        }
-
-        public void printTotal(long endTime) {
-            final double elapsed = (endTime - startTime) / 1000.0;
-            final double recsPerSec = count / elapsed;
-            String[] percs = getPercentiles();
-
-            log.info(String.format(
-                "throughput: %,d records %s, %,.3f records/sec, %d bytes record size, %s total data" +
-                    ", %s/s 50th, %s/s 75th, %s/s 95th, %s/s 99th, %s/s 99.9th, %s/s 99.99th.",
-                count, action, recsPerSec, messageSize, FileUtils.byteCountToDisplaySize(totalBytes),
-                percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]));
-        }
-    }
-
-    /***
-     * Perf recorder that writes the number of bytes recorded every second to a CSV file.
-     */
-     @NotThreadSafe
-    static private class CSVThroughputWriter extends ThroughtputWriter {
-        final private String csvFile;
+    static private class CSVThroughputWriter  {
         final private CSVPrinter csvPrinter;
 
-        CSVThroughputWriter(String action, int messageSize, long startTime, String csvFile) throws IOException {
-            super(action, messageSize, startTime);
-            this.csvFile = csvFile + "-throughput.csv";
+        CSVThroughputWriter(String action, String csvFile) throws IOException {
             csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                .withHeader("second", action + " Throughput (bytes)"));
+                .withHeader("Start", "End","Events",action+" Events Throughput", "Bytes", action+" MiB Throughput"));
         }
 
-        @Override
-        public void recordThroughput(long seconds, long throughputBytes) {
-            super.recordThroughput(seconds, throughputBytes);
+        public void record(long startTime, long lastTime, long bytes, double mbPerSecond, long count, double eventsPerSecond) {
             try {
-                csvPrinter.printRecord(seconds, throughputBytes);
+                csvPrinter.printRecord(startTime, lastTime, count, Precision.round(eventsPerSecond, 2), bytes, Precision.round(mbPerSecond, 2));
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }
         }
 
-        public void printTotal(long endTime) {
+        public void close() {
             try {
                 csvPrinter.close();
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            super.printTotal(endTime);
         }
     }
 
@@ -418,7 +349,7 @@ public class PerfStats {
             int[] percs = getPercentiles();
 
             log.info(String.format(
-                    "%,d records %s, %,.3f records/sec, %d bytes record size, %.2f MiB/sec, %.1f ms avg latency, %.1f ms max latency" +
+                    "%d records %s, %.3f records/sec, %d bytes record size, %.2f MiB/sec, %.1f ms avg latency, %.1f ms max latency" +
                             ", %d ms 50th, %d ms 75th, %d ms 95th, %d ms 99th, %d ms 99.9th, %d ms 99.99th.",
                     count, action, recsPerSec, messageSize, mbPerSec, totalLatency / ((double) count), (double) maxLatency,
                     percs[0], percs[1], percs[2], percs[3], percs[4], percs[5]));

@@ -89,6 +89,8 @@ public class PravegaPerfTest {
         options.addOption("readWatermarkPeriodMillis", true,
                 "If -1 (default), watermarks will not be read.\n" +
                 "If >0, watermarks will be read with a period of this many milliseconds.");
+        options.addOption("reportingIntervalMillis", true, "period (in milliseconds) in which performance will be reported");
+
 
         options.addOption("help", false, "Help message");
 
@@ -176,7 +178,7 @@ public class PravegaPerfTest {
 
     static private abstract class Test {
         static final int MAXTIME = 60 * 60 * 24;
-        static final int REPORTINGINTERVAL = 5000;
+        static final int DEFAULT_REPORTING_INTERVAL = 5000;
         static final int TIMEOUT = 1000;
         static final String SCOPE = "Scope";
 
@@ -208,6 +210,7 @@ public class PravegaPerfTest {
         final boolean enableConnectionPooling;
         final long writeWatermarkPeriodMillis;
         final long readWatermarkPeriodMillis;
+        final int reportingInterval;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -318,6 +321,12 @@ public class PravegaPerfTest {
                 readThroughputFile = null;
             }
 
+            if (commandline.hasOption("reportingIntervalMillis")) {
+                reportingInterval = Integer.parseInt(commandline.getOptionValue("reportingIntervalMillis"));
+            } else {
+                reportingInterval = DEFAULT_REPORTING_INTERVAL;
+            }
+
             enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
             writeWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("writeWatermarkPeriodMillis", "-1"));
@@ -351,7 +360,7 @@ public class PravegaPerfTest {
                 if (writeAndRead) {
                     produceStats = null;
                 } else {
-                    produceStats = new PerfStats("Writing", REPORTINGINTERVAL, messageSize, writeFile, writeThroughputFile);
+                    produceStats = new PerfStats("Writing", reportingInterval, messageSize, writeFile, writeThroughputFile);
                 }
 
                 eventsPerProducer = (events + producerCount - 1) / producerCount;
@@ -376,7 +385,7 @@ public class PravegaPerfTest {
                 } else {
                     action = "Reading";
                 }
-                consumeStats = new PerfStats(action, REPORTINGINTERVAL, messageSize, readFile, readThroughputFile);
+                consumeStats = new PerfStats(action, reportingInterval, messageSize, readFile, readThroughputFile);
                 eventsPerConsumer = events / consumerCount;
             } else {
                 consumeStats = null;
