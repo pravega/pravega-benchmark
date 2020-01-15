@@ -132,7 +132,7 @@ public class PravegaStreamHandler {
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
-        log.info("Sealing and Deleteing the stream : {}} and then recreating the same", stream);
+        log.info("Sealing and Deleting the stream : {} and then recreating the same", stream);
         CompletableFuture<Boolean> sealStatus = controller.sealStream(scope, stream);
         if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
             throw new TimeoutException("ERROR : Segment sealing operation on stream " + stream + " did not complete");
