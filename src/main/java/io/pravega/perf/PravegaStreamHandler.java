@@ -45,16 +45,19 @@ public class PravegaStreamHandler {
     final String controllerUri;
     final ControllerImpl controller;
     final StreamManager streamManager;
-    final StreamConfiguration streamconfig;
     final ScheduledExecutorService bgexecutor;
     final int segCount;
     final int timeout;
+    final int segmentScaleKBps;
+    final int segmentScaleEventsPerSecond;
+    final int scaleFactor;
+
     ReaderGroupManager readerGroupManager;
     ReaderGroupConfig rdGrpConfig;
 
     PravegaStreamHandler(String scope, String stream, String rdGrpName, String uri, int segments, int segmentScaleKBps,
                          int segmentScaleEventsPerSecond, int scaleFactor, int timeout, ControllerImpl controller,
-                         ScheduledExecutorService bgexecutor) throws Exception {
+                         ScheduledExecutorService bgexecutor, boolean createScope) throws Exception {
         this.scope = scope;
         this.stream = stream;
         this.rdGrpName = rdGrpName;
@@ -63,25 +66,18 @@ public class PravegaStreamHandler {
         this.segCount = segments;
         this.timeout = timeout;
         this.bgexecutor = bgexecutor;
+        this.scaleFactor = scaleFactor;
+        this.segmentScaleKBps = segmentScaleKBps;
+        this.segmentScaleEventsPerSecond = segmentScaleEventsPerSecond;
         this.streamManager = StreamManager.create(new URI(uri));
-        this.streamManager.createScope(scope);
 
-        ScalingPolicy scalingPolicy = null;
-        if (segmentScaleEventsPerSecond == 0 && segmentScaleKBps == 0) {
-            scalingPolicy = ScalingPolicy.fixed(segCount);
-        } else if (segmentScaleKBps > 0) {
-            scalingPolicy = ScalingPolicy.byDataRate(segmentScaleKBps, scaleFactor, segCount);
-        } else if (segmentScaleEventsPerSecond > 0) {
-            scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
+        if (createScope) {
+            this.streamManager.createScope(scope);
         }
-
-        this.streamconfig = StreamConfiguration.builder()
-                .scalingPolicy(scalingPolicy)
-                .build();
     }
 
     boolean create() {
-        return streamManager.createStream(scope, stream, streamconfig);
+        return streamManager.createStream(scope, stream, getStreamConfig());
     }
 
     void scale() throws InterruptedException, ExecutionException, TimeoutException {
@@ -100,7 +96,7 @@ public class PravegaStreamHandler {
          * but it indicates with new number of segments.
          * after calling update stream , manual scaling is required
          */
-        if (!streamManager.updateStream(scope, stream, streamconfig)) {
+        if (!streamManager.updateStream(scope, stream, getStreamConfig())) {
             throw new TimeoutException("Could not able to update the stream: " + stream + " try with another stream Name");
         }
 
@@ -142,7 +138,7 @@ public class PravegaStreamHandler {
             throw new TimeoutException("ERROR : stream: " + stream + " delete failed");
         }
 
-        if (!streamManager.createStream(scope, stream, streamconfig)) {
+        if (!streamManager.createStream(scope, stream, getStreamConfig())) {
             throw new TimeoutException("ERROR : stream: " + stream + " recreation failed");
         }
     }
@@ -168,5 +164,20 @@ public class PravegaStreamHandler {
         } catch (RuntimeException e) {
             System.out.println("Cannot delete reader group " + rdGrpName + " because it is already deleted");
         }
+    }
+
+    private StreamConfiguration getStreamConfig() {
+        ScalingPolicy scalingPolicy = null;
+        if (segmentScaleEventsPerSecond == 0 && segmentScaleKBps == 0) {
+            scalingPolicy = ScalingPolicy.fixed(segCount);
+        } else if (segmentScaleKBps > 0) {
+            scalingPolicy = ScalingPolicy.byDataRate(segmentScaleKBps, scaleFactor, segCount);
+        } else if (segmentScaleEventsPerSecond > 0) {
+            scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
+        }
+
+        return StreamConfiguration.builder()
+            .scalingPolicy(scalingPolicy)
+            .build();
     }
 }

@@ -20,7 +20,6 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
@@ -92,6 +91,8 @@ public class PravegaPerfTest {
         options.addOption("readWatermarkPeriodMillis", true,
                 "If -1 (default), watermarks will not be read.\n" +
                 "If >0, watermarks will be read with a period of this many milliseconds.");
+        options.addOption("createScope", true, "indicates that the scope should be created (true by default)");
+        options.addOption("scaleStream", true, "indicates that the stream should be scaled to number of segments if it already exists(true by default)");
 
         options.addOption("help", false, "Help message");
 
@@ -212,6 +213,8 @@ public class PravegaPerfTest {
         final boolean enableConnectionPooling;
         final long writeWatermarkPeriodMillis;
         final long readWatermarkPeriodMillis;
+        final boolean createScope;
+        final boolean scaleStream;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -268,6 +271,9 @@ public class PravegaPerfTest {
 
             writeWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("writeWatermarkPeriodMillis", "-1"));
             readWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("readWatermarkPeriodMillis", "-1"));
+
+            createScope = Boolean.parseBoolean(commandline.getOptionValue("createScope", "true"));
+            scaleStream = Boolean.parseBoolean(commandline.getOptionValue("scaleStream", "true"));
 
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
@@ -396,13 +402,15 @@ public class PravegaPerfTest {
                     bgExecutor);
 
             streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
-                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor);
+                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
 
             if (producerCount > 0 && !streamHandle.create()) {
                 if (recreate) {
                     streamHandle.recreate();
                 } else {
-                    streamHandle.scale();
+                    if (scaleStream) {
+                        streamHandle.scale();
+                    }
                 }
             }
             if (consumerCount > 0) {
