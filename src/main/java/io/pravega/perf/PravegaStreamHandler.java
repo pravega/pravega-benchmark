@@ -34,11 +34,15 @@ import io.pravega.client.segment.impl.Segment;
 import io.pravega.client.stream.impl.StreamImpl;
 import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class for Pravega stream and segments.
  */
 public class PravegaStreamHandler {
+    private static Logger log = LoggerFactory.getLogger(PravegaStreamHandler.class);
+
     final String scope;
     final String stream;
     final String rdGrpName;
@@ -83,13 +87,14 @@ public class PravegaStreamHandler {
     void scale() throws InterruptedException, ExecutionException, TimeoutException {
         StreamSegments segments = controller.getCurrentSegments(scope, stream).join();
         final int nseg = segments.getSegments().size();
-        System.out.println("Current segments of the stream: " + stream + " = " + nseg);
+        log.info("Current segments of the stream: {} = {}", stream, nseg);
 
-        if (nseg == segCount) {
+        if (nseg == segCount || segCount == -1) {
+            log.info("Not modifying existing stream");
             return;
         }
 
-        System.out.println("The stream: " + stream + " will be manually scaling to " + segCount + " segments");
+        log.info("The stream: {} will be manually scaling to {} segments", stream, segCount);
 
         /*
          * Note that the Upgrade stream API does not change the number of segments;
@@ -127,7 +132,7 @@ public class PravegaStreamHandler {
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
-        System.out.println("Sealing and Deleteing the stream : " + stream + " and then recreating the same");
+        log.info("Sealing and Deleteing the stream : {}} and then recreating the same", stream);
         CompletableFuture<Boolean> sealStatus = controller.sealStream(scope, stream);
         if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
             throw new TimeoutException("ERROR : Segment sealing operation on stream " + stream + " did not complete");
@@ -162,7 +167,7 @@ public class PravegaStreamHandler {
         try {
             readerGroupManager.deleteReaderGroup(rdGrpName);
         } catch (RuntimeException e) {
-            System.out.println("Cannot delete reader group " + rdGrpName + " because it is already deleted");
+            log.info("Cannot delete reader group {} because it is already deleted", rdGrpName);
         }
     }
 

@@ -66,7 +66,7 @@ public class PravegaPerfTest {
         options.addOption("time", true, "Number of seconds the code runs");
         options.addOption("transactionspercommit", true,
                 "Number of events before a transaction is committed");
-        options.addOption("segments", true, "Number of segments. If Stream auto-scaling is enabled, this is the initial number of segments.");
+        options.addOption("segments", true, "Number of segments. If Stream auto-scaling is enabled, this is the initial number of segments.  If stream exists using -1 indicates the stream configuration should not be modified.");
         options.addOption("segmentScaleKBps", true, "Setting this option enables Stream auto-scaling. " +
                 "This option tells the throughput in KBps that a Stream segment should receive to be candidate for split (scaleFactor new segments will be created).");
         options.addOption("segmentScaleEventsPerSecond", true, "Setting this option enables Stream auto-scaling. " +
@@ -91,8 +91,7 @@ public class PravegaPerfTest {
         options.addOption("readWatermarkPeriodMillis", true,
                 "If -1 (default), watermarks will not be read.\n" +
                 "If >0, watermarks will be read with a period of this many milliseconds.");
-        options.addOption("createScope", true, "indicates that the scope should be created (true by default)");
-        options.addOption("scaleStream", true, "indicates that the stream should be scaled to number of segments if it already exists(true by default)");
+        options.addOption("createScope", true, "attempt to create Pravega scope(true by default)");
 
         options.addOption("help", false, "Help message");
 
@@ -214,7 +213,6 @@ public class PravegaPerfTest {
         final long writeWatermarkPeriodMillis;
         final long readWatermarkPeriodMillis;
         final boolean createScope;
-        final boolean scaleStream;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -273,7 +271,6 @@ public class PravegaPerfTest {
             readWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("readWatermarkPeriodMillis", "-1"));
 
             createScope = Boolean.parseBoolean(commandline.getOptionValue("createScope", "true"));
-            scaleStream = Boolean.parseBoolean(commandline.getOptionValue("scaleStream", "true"));
 
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
@@ -404,15 +401,14 @@ public class PravegaPerfTest {
             streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
                     segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
 
-            if (producerCount > 0 && !streamHandle.create()) {
+            if (producerCount > 0 && segmentCount > 0 && !streamHandle.create()) {
                 if (recreate) {
                     streamHandle.recreate();
                 } else {
-                    if (scaleStream) {
-                        streamHandle.scale();
-                    }
+                    streamHandle.scale();
                 }
             }
+
             if (consumerCount > 0) {
                 readerGroup = streamHandle.createReaderGroup(!writeAndRead);
             } else {
