@@ -153,7 +153,7 @@ public class PerfStats {
             window.lastTime(time);
 
             if (throughputRecorder != null) {
-                throughputRecorder.record(window.startTime, window.lastTime, window.bytes, window.getMBPerSecond(), window.count, window.getEventsPerSecond());
+                throughputRecorder.record(window.startTime, window.lastTime, window.bytes, window.getMiBPerSecond(), window.count, window.getEventsPerSecond());
             }
 
             window.print();
@@ -210,7 +210,7 @@ public class PerfStats {
             this.elapsedSeconds = (this.lastTime - this.startTime) / 1000.0;
         }
 
-        public double getMBPerSecond() {
+        public double getMiBPerSecond() {
             assert this.elapsedSeconds > 0 : "Elapsed Seconds cannot be zero";
 
             return (this.bytes / (1024.0 * 1024.0)) / elapsedSeconds;
@@ -228,7 +228,7 @@ public class PerfStats {
         private void print() {
             assert this.lastTime > this.startTime : "Invalid Start and EndTime";
             final double recsPerSec = count / elapsedSeconds;
-            final double mbPerSec = getMBPerSecond();
+            final double mbPerSec = getMiBPerSecond();
 
             log.info(String.format("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency));
