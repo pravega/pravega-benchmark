@@ -20,9 +20,10 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -43,6 +44,7 @@ import java.util.stream.Stream;
  * Data format is in comma separated format as following: {TimeStamp, Sensor Id, Location, TempValue }.
  */
 public class PravegaPerfTest {
+    private static Logger log = LoggerFactory.getLogger(PravegaPerfTest.class);
     final static String BENCHMARKNAME = "pravega-benchmark";
 
     public static void main(String[] args) {
@@ -389,6 +391,9 @@ public class PravegaPerfTest {
 
         PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
+
+            log.info("Test Parameters: {}", toString());
+
             final ScheduledExecutorService bgExecutor = Executors.newScheduledThreadPool(10);
             final ControllerImpl controller = new ControllerImpl(ControllerImplConfig.builder()
                     .clientConfig(ClientConfig.builder().controllerURI(new URI(controllerUri)).build())
@@ -471,5 +476,33 @@ public class PravegaPerfTest {
             }
         }
 
+        @Override
+        public String toString() {
+            return "streamName='" + streamName + '\'' +
+                ", rdGrpName='" + rdGrpName + '\'' +
+                ", scopeName='" + scopeName + '\'' +
+                ", recreate=" + recreate +
+                ", writeAndRead=" + writeAndRead +
+                ", producerCount=" + producerCount +
+                ", consumerCount=" + consumerCount +
+                ", segmentCount=" + segmentCount +
+                ", segmentScaleKBps=" + segmentScaleKBps +
+                ", segmentScaleEventsPerSecond=" + segmentScaleEventsPerSecond +
+                ", scaleFactor=" + scaleFactor +
+                ", events=" + events +
+                ", eventsPerSec=" + eventsPerSec +
+                ", eventsPerProducer=" + eventsPerProducer +
+                ", eventsPerConsumer=" + eventsPerConsumer +
+                ", EventsPerFlush=" + EventsPerFlush +
+                ", transactionPerCommit=" + transactionPerCommit +
+                ", runtimeSec=" + runtimeSec +
+                ", throughput=" + throughput +
+                ", writeFile='" + writeFile + '\'' +
+                ", readFile='" + readFile + '\'' +
+                ", startTime=" + startTime +
+                ", enableConnectionPooling=" + enableConnectionPooling +
+                ", writeWatermarkPeriodMillis=" + writeWatermarkPeriodMillis +
+                ", readWatermarkPeriodMillis=" + readWatermarkPeriodMillis;
+        }
     }
 }
