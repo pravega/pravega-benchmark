@@ -313,11 +313,7 @@ public class PravegaPerfTest {
                 readFile = null;
             }
 
-            if (commandline.hasOption("batchreaders")) {
-                batchReaders = true;
-            } else {
-                batchReaders = false;
-            }
+            batchReaders = commandline.hasOption("batchreaders");
 
             enableConnectionPooling = Boolean.parseBoolean(commandline.getOptionValue("enableConnectionPooling", "true"));
 
