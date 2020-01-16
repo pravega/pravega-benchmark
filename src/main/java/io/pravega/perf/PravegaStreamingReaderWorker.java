@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Class for Pravega reader/consumer.
  */
-public class PravegaReaderWorker extends ReaderWorker {
-    private static Logger log = LoggerFactory.getLogger(PravegaReaderWorker.class);
+public class PravegaStreamingReaderWorker extends ReaderWorker {
+    private static Logger log = LoggerFactory.getLogger(PravegaStreamingReaderWorker.class);
 
     private final EventStreamReader<byte[]> reader;
     private final Stream stream;
@@ -38,10 +38,10 @@ public class PravegaReaderWorker extends ReaderWorker {
      *
      * @param readWatermarkPeriodMillis If >0, watermarks will be read with a period of this many milliseconds.
      */
-    PravegaReaderWorker(int readerId, int events, int secondsToRun,
-                        long start, PerfStats stats, String readergrp,
-                        int timeout, boolean writeAndRead, EventStreamClientFactory factory,
-                        Stream stream, long readWatermarkPeriodMillis) {
+    PravegaStreamingReaderWorker(int readerId, int events, int secondsToRun,
+                                 long start, PerfStats stats, String readergrp,
+                                 int timeout, boolean writeAndRead, EventStreamClientFactory factory,
+                                 Stream stream, long readWatermarkPeriodMillis) {
         super(readerId, events, secondsToRun, start, stats, readergrp, timeout, writeAndRead);
 
         final String readerSt = Integer.toString(readerId);
