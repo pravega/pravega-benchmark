@@ -12,7 +12,6 @@ package io.pravega.perf;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -47,7 +46,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
     /**
      * read the data.
      */
-    public abstract byte[] readData();
+    public abstract byte[] readData() throws WorkerCompleteException;
 
     /**
      * close the consumer/reader.
@@ -78,6 +77,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     i++;
                 }
             }
+        } catch(WorkerCompleteException ignore) {
         } finally {
             close();
         }
@@ -100,6 +100,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     i++;
                 }
             }
+        } catch(WorkerCompleteException ignore) {
         } finally {
             close();
         }
@@ -119,6 +120,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     stats.recordTime(time, System.currentTimeMillis(), ret.length);
                 }
             }
+        } catch(WorkerCompleteException ignore) {
         } finally {
             close();
         }
@@ -141,6 +143,7 @@ public abstract class ReaderWorker extends Worker implements Callable<Void> {
                     stats.recordTime(start, time, ret.length);
                 }
             }
+        } catch(WorkerCompleteException ignore) {
         } finally {
             close();
         }

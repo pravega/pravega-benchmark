@@ -28,9 +28,9 @@ public class PravegaBatchReaderWorker extends ReaderWorker {
     }
 
     @Override
-    public byte[] readData() {
+    public byte[] readData() throws WorkerCompleteException {
         if (finished) {
-            return null;
+            throw new WorkerCompleteException(workerID);
         }
 
         if (currentSegmentIterator == null || !currentSegmentIterator.hasNext()) {
