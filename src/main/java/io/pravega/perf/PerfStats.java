@@ -244,8 +244,8 @@ public class PerfStats {
         }
     }
 
-    /***
-     * Perf Recorder that records the number of bytes every second.  Percentiles are reported in human form, i.e. MB/s
+    /**
+     * Perf Recorder that records the number of bytes every second. Percentiles are reported in human form, i.e. MB/s.
      */
     @NotThreadSafe
     static private class CSVThroughputWriter  {
