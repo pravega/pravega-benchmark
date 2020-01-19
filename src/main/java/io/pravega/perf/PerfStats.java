@@ -253,7 +253,7 @@ public class PerfStats {
 
         CSVThroughputWriter(String action, String csvFile) throws IOException {
             csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
-                .withHeader("Start", "End","Events",action+" Events Throughput", "Bytes", action+" MiB Throughput"));
+                .withHeader("Start", "End", "Events", action + " Events Throughput", "Bytes", action + " MiB Throughput"));
         }
 
         public void record(long startTime, long lastTime, long bytes, double mbPerSecond, long count, double eventsPerSecond) {
