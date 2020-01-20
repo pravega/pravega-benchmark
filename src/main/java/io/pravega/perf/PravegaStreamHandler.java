@@ -34,27 +34,34 @@ import io.pravega.client.segment.impl.Segment;
 import io.pravega.client.stream.impl.StreamImpl;
 import io.pravega.client.ClientConfig;
 import io.pravega.client.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Class for Pravega stream and segments.
  */
 public class PravegaStreamHandler {
+    private static Logger log = LoggerFactory.getLogger(PravegaStreamHandler.class);
+
     final String scope;
     final String stream;
     final String rdGrpName;
     final String controllerUri;
     final ControllerImpl controller;
     final StreamManager streamManager;
-    final StreamConfiguration streamconfig;
     final ScheduledExecutorService bgexecutor;
     final int segCount;
     final int timeout;
+    final int segmentScaleKBps;
+    final int segmentScaleEventsPerSecond;
+    final int scaleFactor;
+
     ReaderGroupManager readerGroupManager;
     ReaderGroupConfig rdGrpConfig;
 
     PravegaStreamHandler(String scope, String stream, String rdGrpName, String uri, int segments, int segmentScaleKBps,
                          int segmentScaleEventsPerSecond, int scaleFactor, int timeout, ControllerImpl controller,
-                         ScheduledExecutorService bgexecutor) throws Exception {
+                         ScheduledExecutorService bgexecutor, boolean createScope) throws Exception {
         this.scope = scope;
         this.stream = stream;
         this.rdGrpName = rdGrpName;
@@ -63,44 +70,38 @@ public class PravegaStreamHandler {
         this.segCount = segments;
         this.timeout = timeout;
         this.bgexecutor = bgexecutor;
+        this.scaleFactor = scaleFactor;
+        this.segmentScaleKBps = segmentScaleKBps;
+        this.segmentScaleEventsPerSecond = segmentScaleEventsPerSecond;
         this.streamManager = StreamManager.create(new URI(uri));
-        this.streamManager.createScope(scope);
 
-        ScalingPolicy scalingPolicy = null;
-        if (segmentScaleEventsPerSecond == 0 && segmentScaleKBps == 0) {
-            scalingPolicy = ScalingPolicy.fixed(segCount);
-        } else if (segmentScaleKBps > 0) {
-            scalingPolicy = ScalingPolicy.byDataRate(segmentScaleKBps, scaleFactor, segCount);
-        } else if (segmentScaleEventsPerSecond > 0) {
-            scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
+        if (createScope) {
+            this.streamManager.createScope(scope);
         }
-
-        this.streamconfig = StreamConfiguration.builder()
-                .scalingPolicy(scalingPolicy)
-                .build();
     }
 
     boolean create() {
-        return streamManager.createStream(scope, stream, streamconfig);
+        return streamManager.createStream(scope, stream, getStreamConfig());
     }
 
     void scale() throws InterruptedException, ExecutionException, TimeoutException {
         StreamSegments segments = controller.getCurrentSegments(scope, stream).join();
         final int nseg = segments.getSegments().size();
-        System.out.println("Current segments of the stream: " + stream + " = " + nseg);
+        log.info("Current segments of the stream: {} = {}", stream, nseg);
 
-        if (nseg == segCount) {
+        if (nseg == segCount || segCount == -1) {
+            log.info("Not modifying existing stream");
             return;
         }
 
-        System.out.println("The stream: " + stream + " will be manually scaling to " + segCount + " segments");
+        log.info("The stream: {} will be manually scaling to {} segments", stream, segCount);
 
         /*
          * Note that the Upgrade stream API does not change the number of segments;
          * but it indicates with new number of segments.
          * after calling update stream , manual scaling is required
          */
-        if (!streamManager.updateStream(scope, stream, streamconfig)) {
+        if (!streamManager.updateStream(scope, stream, getStreamConfig())) {
             throw new TimeoutException("Could not able to update the stream: " + stream + " try with another stream Name");
         }
 
@@ -131,7 +132,7 @@ public class PravegaStreamHandler {
     }
 
     void recreate() throws InterruptedException, ExecutionException, TimeoutException {
-        System.out.println("Sealing and Deleteing the stream : " + stream + " and then recreating the same");
+        log.info("Sealing and Deleting the stream : {} and then recreating the same", stream);
         CompletableFuture<Boolean> sealStatus = controller.sealStream(scope, stream);
         if (!sealStatus.get(timeout, TimeUnit.SECONDS)) {
             throw new TimeoutException("ERROR : Segment sealing operation on stream " + stream + " did not complete");
@@ -142,7 +143,7 @@ public class PravegaStreamHandler {
             throw new TimeoutException("ERROR : stream: " + stream + " delete failed");
         }
 
-        if (!streamManager.createStream(scope, stream, streamconfig)) {
+        if (!streamManager.createStream(scope, stream, getStreamConfig())) {
             throw new TimeoutException("ERROR : stream: " + stream + " recreation failed");
         }
     }
@@ -166,7 +167,22 @@ public class PravegaStreamHandler {
         try {
             readerGroupManager.deleteReaderGroup(rdGrpName);
         } catch (RuntimeException e) {
-            System.out.println("Cannot delete reader group " + rdGrpName + " because it is already deleted");
+            log.info("Cannot delete reader group {} because it is already deleted", rdGrpName);
         }
+    }
+
+    private StreamConfiguration getStreamConfig() {
+        ScalingPolicy scalingPolicy = null;
+        if (segmentScaleEventsPerSecond == 0 && segmentScaleKBps == 0) {
+            scalingPolicy = ScalingPolicy.fixed(segCount);
+        } else if (segmentScaleKBps > 0) {
+            scalingPolicy = ScalingPolicy.byDataRate(segmentScaleKBps, scaleFactor, segCount);
+        } else if (segmentScaleEventsPerSecond > 0) {
+            scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
+        }
+
+        return StreamConfiguration.builder()
+            .scalingPolicy(scalingPolicy)
+            .build();
     }
 }
