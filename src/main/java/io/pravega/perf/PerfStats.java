@@ -363,7 +363,7 @@ public class PerfStats {
 
         CSVLatencyWriter(String action, int messageSize, long start, String csvFile) throws IOException {
             super(action, messageSize, start);
-            this.csvFile = csvFile + "-latency.csv";;
+            this.csvFile = csvFile;
             csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
                     .withHeader("Start Time (Milliseconds)", "event size (bytes)", action + " Latency (Milliseconds)"));
         }
