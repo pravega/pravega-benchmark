@@ -38,7 +38,8 @@ buildscript {
                 "org.apache.commons:commons-math3:${commonsMathVersion}",
                 "org.apache.commons:commons-io:${commonsIOVersion}"
 
-        runtime "org.slf4j:slf4j-simple:${slf4jSimpleVersion}"
+        runtime "org.slf4j:slf4j-simple:${slf4jSimpleVersion}",
+                "io.pravega:pravega-keycloak-client:${pravegaKeycloakVersion}"
     }
 mainClassName = "io.pravega.perf.PravegaPerfTest"
 startScripts {
