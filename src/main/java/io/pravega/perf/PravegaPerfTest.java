@@ -95,7 +95,7 @@ public class PravegaPerfTest {
                 "If -1 (default), watermarks will not be read.\n" +
                 "If >0, watermarks will be read with a period of this many milliseconds.");
 
-        options.addOption("batchreaders", false, "signifies the consumers should all be Batch Readers rather than Streaming readers");
+        options.addOption("batchreaders", false, "Use batch readers rather than Streaming readers for consumers");
 
         options.addOption("help", false, "Help message");
 
@@ -552,7 +552,7 @@ public class PravegaPerfTest {
          */
         private List<List<SegmentRange>> assignSegmentsToConsumers(List<SegmentRange> segmentRanges, int consumers) {
             List<List<SegmentRange>> results = new ArrayList<>();
-            for (int f=0;f<consumers;f++) {
+            for (int f=0; f < consumers; f++) {
                 results.add(new ArrayList<>());
             }
 

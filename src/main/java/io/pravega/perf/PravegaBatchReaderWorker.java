@@ -1,3 +1,13 @@
+/**
+ * Copyright (c) 2017 Dell Inc., or its subsidiaries. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ */
+
 package io.pravega.perf;
 
 import io.pravega.client.BatchClientFactory;
@@ -37,7 +47,7 @@ public class PravegaBatchReaderWorker extends ReaderWorker {
             if (currentRange != null) {
                 currentSegmentIterator.close();
 
-                log.info("id:{} Completed Segment {}, {}({}:{})",workerID, currentRange.getStreamName(), currentRange.getSegmentId(), currentRange.getStartOffset(), currentRange.getEndOffset());
+                log.info("id:{} Completed Segment {}, {}({}:{})", workerID, currentRange.getStreamName(), currentRange.getSegmentId(), currentRange.getStartOffset(), currentRange.getEndOffset());
             }
 
             if (assignedSegments.hasNext()) {
@@ -45,7 +55,7 @@ public class PravegaBatchReaderWorker extends ReaderWorker {
                 currentRange = assignedSegments.next();
                 currentSegmentIterator = batchClientFactory.readSegment(currentRange, new ByteArraySerializer());
 
-                log.info("id:{} Starting Segment {}, {}({}:{})",workerID, currentRange.getStreamName(), currentRange.getSegmentId(), currentRange.getStartOffset(), currentRange.getEndOffset());
+                log.info("id:{} Starting Segment {}, {}({}:{})", workerID, currentRange.getStreamName(), currentRange.getSegmentId(), currentRange.getStartOffset(), currentRange.getEndOffset());
             } else {
                 log.info("id:{} Completed all assigned assignedSegments", workerID);
                 currentSegmentIterator = null;
