@@ -24,6 +24,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.math3.util.Precision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,8 +38,11 @@ import javax.annotation.concurrent.NotThreadSafe;
 public class PerfStats {
     private static Logger log = LoggerFactory.getLogger(PerfStats.class);
 
+    private static final double[] PERCENTILES = {0.5, 0.75, 0.95, 0.99, 0.999, 0.9999};
+
     final private String action;
     final private String csvFile;
+    final private String throughputCsvFile;
     final private int messageSize;
     final private int windowInterval;
     final private ConcurrentLinkedQueue<TimeStamp> queue;
@@ -70,11 +74,12 @@ public class PerfStats {
         }
     }
 
-    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile) {
+    public PerfStats(String action, int reportingInterval, int messageSize, String csvFile, String throughputCsvFile) {
         this.action = action;
         this.messageSize = messageSize;
         this.windowInterval = reportingInterval;
         this.csvFile = csvFile;
+        this.throughputCsvFile = throughputCsvFile;
         this.queue = new ConcurrentLinkedQueue<>();
         this.executor = new ForkJoinPool(1);
         this.ret = null;
@@ -89,13 +94,15 @@ public class PerfStats {
         final private static int NS_PER_MS = NS_PER_MICRO * MICROS_PER_MS;
         final private static int PARK_NS = NS_PER_MICRO;
         final private long startTime;
+        final TimeWindow window;
+        CSVThroughputWriter throughputRecorder;
 
-        private QueueProcessor(long startTime) {
+        private QueueProcessor(long startTime){
             this.startTime = startTime;
+            window = new TimeWindow(action, startTime);
         }
 
         public Void call() throws IOException {
-            final TimeWindow window = new TimeWindow(action, startTime);
             final LatencyWriter latencyRecorder = csvFile == null ? new LatencyWriter(action, messageSize, startTime) :
                     new CSVLatencyWriter(action, messageSize, startTime, csvFile);
             final int minWaitTimeMS = windowInterval / 50;
@@ -103,6 +110,8 @@ public class PerfStats {
             boolean doWork = true;
             long time = startTime;
             long idleCount = 0;
+
+            throughputRecorder = throughputCsvFile != null ? new CSVThroughputWriter(action, throughputCsvFile) : null;
             TimeStamp t;
 
             while (doWork) {
@@ -113,12 +122,12 @@ public class PerfStats {
                     } else {
                         final int latency = (int) (t.endTime - t.startTime);
                         window.record(t.bytes, latency);
+
                         latencyRecorder.record(t.startTime, t.bytes, latency);
                     }
                     time = t.endTime;
                     if (window.windowTimeMS(time) > windowInterval) {
-                        window.print(time);
-                        window.reset(time);
+                        resetWindow(time);
                     }
                 } else {
                     LockSupport.parkNanos(PARK_NS);
@@ -127,14 +136,28 @@ public class PerfStats {
                         time = System.currentTimeMillis();
                         idleCount = 0;
                         if (window.windowTimeMS(time) > windowInterval) {
-                            window.print(time);
-                            window.reset(time);
+                            resetWindow(time);
                         }
                     }
                 }
             }
+
             latencyRecorder.printTotal(time);
+            if (throughputRecorder != null) {
+                throughputRecorder.close();
+            }
             return null;
+        }
+
+        private final void resetWindow(long time) {
+            window.lastTime(time);
+
+            if (throughputRecorder != null) {
+                throughputRecorder.record(window.startTime, window.lastTime, window.bytes, window.getMiBPerSecond(), window.count, window.getEventsPerSecond());
+            }
+
+            window.print();
+            window.reset(time);
         }
     }
 
@@ -150,6 +173,7 @@ public class PerfStats {
         private long bytes;
         private int maxLatency;
         private long totalLatency;
+        private double elapsedSeconds = 0;
 
         private TimeWindow(String action, long start) {
             this.action = action;
@@ -163,6 +187,7 @@ public class PerfStats {
             this.bytes = 0;
             this.maxLatency = 0;
             this.totalLatency = 0;
+            this.elapsedSeconds = 0;
         }
 
         /**
@@ -178,15 +203,32 @@ public class PerfStats {
             this.maxLatency = Math.max(this.maxLatency, latency);
         }
 
+        public void lastTime(long time) {
+            this.lastTime = time;
+
+            assert this.lastTime > this.startTime : "Invalid Start and EndTime";
+            this.elapsedSeconds = (this.lastTime - this.startTime) / 1000.0;
+        }
+
+        public double getMiBPerSecond() {
+            assert this.elapsedSeconds > 0 : "Elapsed Seconds cannot be zero";
+
+            return (this.bytes / (1024.0 * 1024.0)) / elapsedSeconds;
+        }
+
+        public double getEventsPerSecond() {
+            assert this.elapsedSeconds > 0 : "Elapsed Seconds cannot be zero";
+
+            return count/elapsedSeconds;
+        }
+
         /**
          * Print the window statistics
          */
-        private void print(long time) {
-            this.lastTime = time;
+        private void print() {
             assert this.lastTime > this.startTime : "Invalid Start and EndTime";
-            final double elapsed = (this.lastTime - this.startTime) / 1000.0;
-            final double recsPerSec = count / elapsed;
-            final double mbPerSec = (this.bytes / (1024.0 * 1024.0)) / elapsed;
+            final double recsPerSec = count / elapsedSeconds;
+            final double mbPerSec = getMiBPerSecond();
 
             log.info(String.format("%8d records %s, %9.1f records/sec, %6.2f MiB/sec, %7.1f ms avg latency, %7.1f ms max latency",
                     count, action, recsPerSec, mbPerSec, totalLatency / (double) count, (double) maxLatency));
@@ -202,12 +244,40 @@ public class PerfStats {
         }
     }
 
+    /**
+     * Perf Recorder that records the number of bytes every second. Percentiles are reported in human form, i.e. MB/s.
+     */
+    @NotThreadSafe
+    static private class CSVThroughputWriter  {
+        final private CSVPrinter csvPrinter;
+
+        CSVThroughputWriter(String action, String csvFile) throws IOException {
+            csvPrinter = new CSVPrinter(Files.newBufferedWriter(Paths.get(csvFile)), CSVFormat.DEFAULT
+                .withHeader("Start", "End", "Events", action + " Events Throughput", "Bytes", action + " MiB Throughput"));
+        }
+
+        public void record(long startTime, long lastTime, long bytes, double mbPerSecond, long count, double eventsPerSecond) {
+            try {
+                csvPrinter.printRecord(startTime, lastTime, count, Precision.round(eventsPerSecond, 2), bytes, Precision.round(mbPerSecond, 2));
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+
+        public void close() {
+            try {
+                csvPrinter.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     @NotThreadSafe
     static private class LatencyWriter {
         final static int MS_PER_SEC = 1000;
         final static int MS_PER_MIN = MS_PER_SEC * 60;
         final static int MS_PER_HR = MS_PER_MIN * 60;
-        final double[] percentiles = {0.5, 0.75, 0.95, 0.99, 0.999, 0.9999};
         final String action;
         final int messageSize;
         final long startTime;
@@ -244,12 +314,12 @@ public class PerfStats {
         }
 
         private int[] getPercentiles() {
-            int[] percentileIds = new int[percentiles.length];
+            int[] percentileIds = new int[PERCENTILES.length];
             int[] values = new int[percentileIds.length];
             int index = 0;
 
-            for (int i = 0; i < percentiles.length; i++) {
-                percentileIds[i] = (int) (count * percentiles[i]);
+            for (int i = 0; i < PERCENTILES.length; i++) {
+                percentileIds[i] = (int) (count * PERCENTILES[i]);
             }
 
             for (int[] lr : latencyRanges) {
