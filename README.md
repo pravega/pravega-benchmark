@@ -246,11 +246,12 @@ export JAVA_TOOL_OPTIONS
 ```
 
 Note:
-* The token used in the example above is for `Basic` authentication, which is handled by the Password Auth
-Handler. The token's value equals Base64 encoded value of string `{username}:{password}`. The value shown in the example
-above is Base64 encoded value of string `admin:1111_aaaa`. If you are using another authentication method supported
-by a custom Pravega Auth Handler, generate a corresponding token, and specify it instead.
-* Moreover, TLS host name verification is turned off by default to make it easier to run this tool. To enable hostname
+* The specified token `YWRtaW46MTExMV9hYWFh` shown in the example above equals Base64 encoded value of credentials
+in `{username}:{password}` format supported by the specified authentication method `Basic`. The specified token is
+Base64 encoded value of string `admin:1111_aaaa`, represent the admin account available in the Password Auth Handler
+database. If you are using another authentication method supported by a custom Pravega Auth Handler, generate a
+corresponding token, and specify the token and method here instead.
+* TLS host name verification is turned off by default to make it easier to run this tool. To enable hostname
 verification, specify `-validateCertHostName true` option when executing it.
 
 ## Running in Docker
