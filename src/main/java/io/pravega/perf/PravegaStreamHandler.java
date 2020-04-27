@@ -148,10 +148,9 @@ public class PravegaStreamHandler {
         }
     }
 
-    ReaderGroup createReaderGroup(boolean reset) throws URISyntaxException {
+    ReaderGroup createReaderGroup(boolean reset, ClientConfig clientConfig) throws URISyntaxException {
         if (readerGroupManager == null) {
-            readerGroupManager = ReaderGroupManager.withScope(scope,
-                    ClientConfig.builder().controllerURI(new URI(controllerUri)).build());
+            readerGroupManager = ReaderGroupManager.withScope(scope, clientConfig);
             rdGrpConfig = ReaderGroupConfig.builder()
                     .stream(Stream.of(scope, stream)).build();
         }

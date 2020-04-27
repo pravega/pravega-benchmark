@@ -12,6 +12,7 @@ package io.pravega.perf;
 
 import io.pravega.client.ClientConfig;
 import io.pravega.client.EventStreamClientFactory;
+import io.pravega.client.netty.impl.ConnectionFactoryImpl;
 import io.pravega.client.stream.ReaderGroup;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
 import io.pravega.client.stream.impl.ControllerImpl;
@@ -28,6 +29,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -98,6 +101,8 @@ public class PravegaPerfTest {
                 "If >0, watermarks will be read with a period of this many milliseconds.");
         options.addOption("reportingIntervalMillis", true, "period (in milliseconds) in which performance will be reported");
         options.addOption("createScope", true, "attempt to create Pravega scope(true by default)");
+        options.addOption("trustStoreLocation", true, "Location of the truststore to use when making TLS connections to server");
+        options.addOption("validateCertHostName", true, "Whether to turn on host name verification for TLS certificates");
 
         options.addOption("help", false, "Help message");
 
@@ -222,6 +227,8 @@ public class PravegaPerfTest {
         final long readWatermarkPeriodMillis;
         final int reportingInterval;
         final boolean createScope;
+        final String trustStoreLocation;
+        final boolean validateHostName;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -297,6 +304,14 @@ public class PravegaPerfTest {
             readWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("readWatermarkPeriodMillis", "-1"));
 
             createScope = Boolean.parseBoolean(commandline.getOptionValue("createScope", "true"));
+
+            if (commandline.hasOption("trustStoreLocation")) {
+                trustStoreLocation = commandline.getOptionValue("trustStoreLocation");
+                log.debug("trustStoreLocation=" + trustStoreLocation);
+            } else {
+                trustStoreLocation = null;
+            }
+            validateHostName = Boolean.parseBoolean(commandline.getOptionValue("validateCertHostName", "false"));
 
             if (controllerUri == null) {
                 throw new IllegalArgumentException("Error: Must specify Controller IP address");
@@ -408,7 +423,6 @@ public class PravegaPerfTest {
                 return defaultValue;
             }
         }
-
     }
 
     static private class PravegaTest extends Test {
@@ -422,10 +436,19 @@ public class PravegaPerfTest {
             log.info("Test Parameters: {}", toString());
 
             final ScheduledExecutorService bgExecutor = Executors.newScheduledThreadPool(10);
+            ClientConfig.ClientConfigBuilder clientConfigBuilder = ClientConfig.builder().controllerURI(new URI(controllerUri));
+            if (controllerUri.startsWith("tls:") || controllerUri.startsWith("pravegas:")) {
+                if (trustStoreLocation != null) {
+                    if (!Files.exists(Paths.get(trustStoreLocation))) {
+                        throw new RuntimeException("Specified truststore file does not exist");
+                    }
+                    clientConfigBuilder.trustStore(trustStoreLocation);
+                }
+                clientConfigBuilder.validateHostName(false);
+            }
+            ClientConfig clientConfig = clientConfigBuilder.build();
             final ControllerImpl controller = new ControllerImpl(ControllerImplConfig.builder()
-                    .clientConfig(ClientConfig.builder().controllerURI(new URI(controllerUri)).build())
-                    .maxBackoffMillis(5000).build(),
-                    bgExecutor);
+                    .clientConfig(clientConfig).maxBackoffMillis(5000).build(), bgExecutor);
 
             streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
                     segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
@@ -439,12 +462,11 @@ public class PravegaPerfTest {
             }
 
             if (consumerCount > 0) {
-                readerGroup = streamHandle.createReaderGroup(!writeAndRead);
+                readerGroup = streamHandle.createReaderGroup(!writeAndRead, clientConfig);
             } else {
                 readerGroup = null;
             }
-
-            factory = new ClientFactoryImpl(scopeName, controller);
+            factory = new ClientFactoryImpl(scopeName, controller, new ConnectionFactoryImpl(clientConfig));
         }
 
         public List<WriterWorker> getProducers() {
