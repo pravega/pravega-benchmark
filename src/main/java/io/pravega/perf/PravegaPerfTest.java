@@ -101,7 +101,6 @@ public class PravegaPerfTest {
                 "If >0, watermarks will be read with a period of this many milliseconds.");
         options.addOption("reportingIntervalMillis", true, "period (in milliseconds) in which performance will be reported");
         options.addOption("createScope", true, "attempt to create Pravega scope(true by default)");
-        options.addOption("trustStoreLocation", true, "Location of the truststore to use when making TLS connections to server");
         options.addOption("validateCertHostName", true, "Whether to turn on host name verification for TLS certificates");
 
         options.addOption("help", false, "Help message");
@@ -227,7 +226,6 @@ public class PravegaPerfTest {
         final long readWatermarkPeriodMillis;
         final int reportingInterval;
         final boolean createScope;
-        final String trustStoreLocation;
         final boolean validateHostName;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
@@ -304,13 +302,6 @@ public class PravegaPerfTest {
             readWatermarkPeriodMillis = Long.parseLong(commandline.getOptionValue("readWatermarkPeriodMillis", "-1"));
 
             createScope = Boolean.parseBoolean(commandline.getOptionValue("createScope", "true"));
-
-            if (commandline.hasOption("trustStoreLocation")) {
-                trustStoreLocation = commandline.getOptionValue("trustStoreLocation");
-                log.debug("trustStoreLocation=" + trustStoreLocation);
-            } else {
-                trustStoreLocation = null;
-            }
             validateHostName = Boolean.parseBoolean(commandline.getOptionValue("validateCertHostName", "false"));
 
             if (controllerUri == null) {
@@ -436,19 +427,12 @@ public class PravegaPerfTest {
             log.info("Test Parameters: {}", toString());
 
             final ScheduledExecutorService bgExecutor = Executors.newScheduledThreadPool(10);
-            ClientConfig.ClientConfigBuilder clientConfigBuilder = ClientConfig.builder().controllerURI(new URI(controllerUri));
-            if (controllerUri.startsWith("tls:") || controllerUri.startsWith("pravegas:")) {
-                if (trustStoreLocation != null) {
-                    if (!Files.exists(Paths.get(trustStoreLocation))) {
-                        throw new RuntimeException("Specified truststore file does not exist");
-                    }
-                    clientConfigBuilder.trustStore(trustStoreLocation);
-                }
-                clientConfigBuilder.validateHostName(false);
-            }
-            ClientConfig clientConfig = clientConfigBuilder.build();
+            ClientConfig clientConfig = ClientConfig.builder().controllerURI(new URI(controllerUri))
+                    .validateHostName(validateHostName).build();
             final ControllerImpl controller = new ControllerImpl(ControllerImplConfig.builder()
-                    .clientConfig(clientConfig).maxBackoffMillis(5000).build(), bgExecutor);
+                    .clientConfig(clientConfig)
+                    .maxBackoffMillis(5000).build(),
+                    bgExecutor);
 
             streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
                     segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
