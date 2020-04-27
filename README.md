@@ -238,7 +238,7 @@ for the client via the `JAVA_TOOL_OPTIONS` environment variable, before executin
 
 Below is an example:
 
-```
+```bash
 JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/path/to/client.truststore.jks"
 JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS} -Dpravega.client.auth.method=Basic"
 JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS} -Dpravega.client.auth.token=YWRtaW46MTExMV9hYWFh"
