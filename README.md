@@ -245,7 +245,12 @@ JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS} -Dpravega.client.auth.token=YWRtaW46MTEx
 export JAVA_TOOL_OPTIONS
 ```
 
-Moreover, TLS host name verification is turned off by default to make it easier to run this tool. To enable hostname
+Note:
+* The token used in the example above is for `Basic` authentication, which is handled by the Password Auth
+Handler. The token's value equals Base64 encoded value of string `{username}:{password}`. The value shown in the example
+above is Base64 encoded value of string `admin:1111_aaaa`. If you are using another authentication method supported
+by a custom Pravega Auth Handler, generate a corresponding token, and specify it instead.
+* Moreover, TLS host name verification is turned off by default to make it easier to run this tool. To enable hostname
 verification, specify `-validateCertHostName true` option when executing it.
 
 ## Running in Docker
