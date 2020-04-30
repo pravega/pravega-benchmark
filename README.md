@@ -92,6 +92,8 @@ usage: pravega-benchmark
                                      If >= 0 and using transactions,
                                      watermarks will be written on each
                                      commit.
+ -validateCertHostName               Whether to turn on host name verification
+                                     for TLS certificates
 ```
 ## Running Performance benchmarking
 
@@ -228,6 +230,29 @@ The `-throughput -1` specifies the writes tries to write the events at the maxim
 ### Recording the latencies to CSV files
 User can use the options `-writecsv  <file name>` to record the latencies of writers and `-readcsv <file name>` for readers.
 in case of End to End latency mode, if the user can supply only `-readcsv` to get the end to end latency in to the csv file.
+
+## Configuring Security Parameters
+
+To run against Security Enabled Pravega, you will need to specify TLS and authentication/authorization parameters
+for the client via the `JAVA_TOOL_OPTIONS` environment variable, before executing this tool.
+
+Below is an example:
+
+```bash
+JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=/path/to/client.truststore.jks"
+JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS} -Dpravega.client.auth.method=Basic"
+JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS} -Dpravega.client.auth.token=YWRtaW46MTExMV9hYWFh"
+export JAVA_TOOL_OPTIONS
+```
+
+Note:
+* The specified token `YWRtaW46MTExMV9hYWFh` shown in the example above equals Base64 encoded value of credentials
+in `{username}:{password}` format supported by the specified authentication method `Basic`. The specified token is
+Base64 encoded value of string `admin:1111_aaaa`, represent the admin account available in the Password Auth Handler
+database. If you are using another authentication method supported by a custom Pravega Auth Handler, generate a
+corresponding token, and specify the token and method here instead.
+* TLS host name verification is turned off by default to make it easier to run this tool. To enable hostname
+verification, specify `-validateCertHostName true` option when executing it.
 
 ## Running in Docker
 
