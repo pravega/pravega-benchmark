@@ -22,7 +22,7 @@ import java.net.URISyntaxException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import io.pravega.client.stream.impl.ControllerImpl;
+import io.pravega.client.control.impl.ControllerImpl;
 import io.pravega.client.admin.StreamManager;
 import io.pravega.client.stream.StreamConfiguration;
 import io.pravega.client.stream.ReaderGroupConfig;
