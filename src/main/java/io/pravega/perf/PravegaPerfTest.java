@@ -12,11 +12,12 @@ package io.pravega.perf;
 
 import io.pravega.client.ClientConfig;
 import io.pravega.client.EventStreamClientFactory;
-import io.pravega.client.netty.impl.ConnectionFactoryImpl;
+import io.pravega.client.connection.impl.ConnectionFactory;
+import io.pravega.client.connection.impl.SocketConnectionFactoryImpl;
+import io.pravega.client.control.impl.ControllerImpl;
+import io.pravega.client.control.impl.ControllerImplConfig;
 import io.pravega.client.stream.ReaderGroup;
 import io.pravega.client.stream.impl.ClientFactoryImpl;
-import io.pravega.client.stream.impl.ControllerImpl;
-import io.pravega.client.stream.impl.ControllerImplConfig;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -29,8 +30,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -450,7 +449,7 @@ public class PravegaPerfTest {
             } else {
                 readerGroup = null;
             }
-            factory = new ClientFactoryImpl(scopeName, controller, new ConnectionFactoryImpl(clientConfig));
+            factory = new ClientFactoryImpl(scopeName, controller, new SocketConnectionFactoryImpl(clientConfig));
         }
 
         public List<WriterWorker> getProducers() {
