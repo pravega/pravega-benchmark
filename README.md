@@ -48,7 +48,7 @@ Running Pravega benchmark tool locally:
 usage: pravega-benchmark
  -consumers <arg>                    Number of consumers
  -controller <arg>                   Controller URI
- -enableConnectionPooling <arg>      Set to false to disable connection
+ -enableConnectionPooling <arg>      Set to true to enable connection
                                      pooling
  -events <arg>                       Number of events/records if 'time'
                                      not specified;
