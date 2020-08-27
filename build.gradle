@@ -25,7 +25,8 @@ buildscript {
         jcenter()
         mavenCentral()
         maven {
-            url "https://oss.jfrog.org/jfrog-dependencies"
+            name "release"
+            url "http://asdrepo.isus.emc.com:8101/artifactory/nautilus-build"
         }
     }
 
@@ -38,8 +39,7 @@ buildscript {
                 "org.apache.commons:commons-math3:${commonsMathVersion}",
                 "org.apache.commons:commons-io:${commonsIOVersion}"
 
-        runtime "org.slf4j:slf4j-simple:${slf4jSimpleVersion}",
-                "io.pravega:pravega-keycloak-client:${pravegaKeycloakVersion}"
+        runtime "org.slf4j:slf4j-simple:${slf4jSimpleVersion}"
     }
 mainClassName = "io.pravega.perf.PravegaPerfTest"
 startScripts {

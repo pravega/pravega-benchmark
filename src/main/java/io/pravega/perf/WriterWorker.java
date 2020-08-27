@@ -190,9 +190,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                    flushing moderates the kafka producer.
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
-            flush();
             eCnt.control(i);
         }
+        flush();
     }
 
 
@@ -215,9 +215,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                    flushing moderates the kafka producer.
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
-            flush();
             eCnt.control(i);
         }
+        flush();
     }
 
 
