@@ -10,6 +10,8 @@
 
 package io.pravega.perf;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import io.pravega.client.EventStreamClientFactory;
@@ -31,6 +33,8 @@ public class PravegaWriterWorker extends WriterWorker {
 
     // No guard is required for nextNoteTime because it is only used by one thread per instance.
     private long nextNoteTime = System.currentTimeMillis();
+
+    private List<String> dataList = new ArrayList<>();
 
     /**
      * Construct a PravegaWriterWorker.
@@ -71,8 +75,19 @@ public class PravegaWriterWorker extends WriterWorker {
 
     @Override
     public void writeData(byte[] data) {
+        // record data to csv
         producer.writeEvent(data);
+        recordData(data);
         noteTimePeriodically();
+    }
+
+    private void recordData(byte[] data) {
+        dataList.add(new String(data));
+        if(dataList.size() >= 100) {
+            log.info("start record data, size is {}", dataList);
+            CSVUtils.importCSV("/root", dataList);
+            dataList = new ArrayList<>();
+        }
     }
 
     private void noteTimePeriodically() {
