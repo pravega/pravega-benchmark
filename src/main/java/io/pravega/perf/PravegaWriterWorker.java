@@ -66,6 +66,10 @@ public class PravegaWriterWorker extends WriterWorker {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
         ret = producer.writeEvent(data);
+//        recordData(data);
+        log.info("Event write: {}", new String(data));
+        dataList.add(new String(data));
+        log.info("Event size: {}", dataList.size());
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });
@@ -76,19 +80,23 @@ public class PravegaWriterWorker extends WriterWorker {
     @Override
     public void writeData(byte[] data) {
         // record data to csv
+        log.info("Event write: {}", new String(data));
+        dataList.add(new String(data));
+        log.info("Event size: {}", dataList.size());
         producer.writeEvent(data);
-        recordData(data);
+//        recordData(data);
         noteTimePeriodically();
     }
 
-    private void recordData(byte[] data) {
-        dataList.add(new String(data));
-        if(dataList.size() >= 100) {
-            log.info("start record data, size is {}", dataList);
-            CSVUtils.importCSV("/root", dataList);
-            dataList = new ArrayList<>();
-        }
-    }
+//    private void recordData(byte[] data) {
+//        log.info("record data");
+//        dataList.add(new String(data));
+//        if(dataList.size() >= 100) {
+//            log.info("start record data, size is {}", dataList);
+//            CSVUtils.importCSV("/root/", dataList);
+//            dataList = new ArrayList<>();
+//        }
+//    }
 
     private void noteTimePeriodically() {
         if (writeWatermarkPeriodMillis >= 0) {

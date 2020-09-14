@@ -49,6 +49,6 @@ public class CSVUtils {
         for (int i = 0; i < 100; i++) {
             dataList.add("TEST-DATA-" + i);
         }
-        importCSV("./", dataList);
+        importCSV("C:/workspace/", dataList);
     }
 }

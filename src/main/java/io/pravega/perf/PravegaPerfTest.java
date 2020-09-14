@@ -160,7 +160,7 @@ public class PravegaPerfTest {
                 }
             });
             perfTest.start(System.currentTimeMillis());
-            log.info("------------- Start writer/read, worker number is {} ---------------", workers.size());
+            log.info("------------- Start writer/read, worker1111111 number is {} ---------------", workers.size());
             executor.invokeAll(workers);
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
