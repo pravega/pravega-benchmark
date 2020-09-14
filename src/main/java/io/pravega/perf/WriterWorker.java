@@ -125,7 +125,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private void EventsWriter() throws InterruptedException, IOException {
         log.info("EventsWriter: Running");
         for (int i = 0; i < events; i++) {
-            recordWrite(payload, stats::recordTime);
+            byte[] data = createPayload(messageSize);
+            recordWrite(data, stats::recordTime);
         }
         flush();
     }
@@ -138,7 +139,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         while (cnt < events) {
             int loopMax = Math.min(EventsPerFlush, events - cnt);
             for (int i = 0; i < loopMax; i++) {
-                eCnt.control(cnt++, recordWrite(payload, stats::recordTime));
+                byte[] data = createPayload(messageSize);
+                eCnt.control(cnt++, recordWrite(data, stats::recordTime));
             }
             flush();
         }
@@ -150,7 +152,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final long msToRun = secondsToRun * MS_PER_SEC;
         long time = System.currentTimeMillis();
         while ((time - startTime) < msToRun) {
-            time = recordWrite(payload, stats::recordTime);
+            byte[] data = createPayload(messageSize);
+            time = recordWrite(data, stats::recordTime);
         }
         flush();
     }
@@ -165,7 +168,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         int cnt = 0;
         while (msElapsed < msToRun) {
             for (int i = 0; (msElapsed < msToRun) && (i < EventsPerFlush); i++) {
-                time = recordWrite(payload, stats::recordTime);
+                byte[] data = createPayload(messageSize);
+                time = recordWrite(data, stats::recordTime);
                 eCnt.control(cnt++, time);
                 msElapsed = time - startTime;
             }
@@ -180,9 +184,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final long time = System.currentTimeMillis();
         final EventsController eCnt = new EventsController(time, eventsPerSec);
         for (int i = 0; i < events; i++) {
+            byte[] data = createPayload(messageSize);
             byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
-            System.arraycopy(bytes, 0, payload, 0, bytes.length);
-            writeData(payload);
+            System.arraycopy(bytes, 0, data, 0, bytes.length);
+            writeData(data);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.
@@ -204,10 +209,11 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final EventsController eCnt = new EventsController(time, eventsPerSec);
 
         for (int i = 0; (time - startTime) < msToRun; i++) {
+            byte[] data = createPayload(messageSize);
             time = System.currentTimeMillis();
             byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
-            System.arraycopy(bytes, 0, payload, 0, bytes.length);
-            writeData(payload);
+            System.arraycopy(bytes, 0, data, 0, bytes.length);
+            writeData(data);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.
