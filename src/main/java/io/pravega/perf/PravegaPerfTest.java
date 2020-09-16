@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -160,7 +161,7 @@ public class PravegaPerfTest {
                 }
             });
             perfTest.start(System.currentTimeMillis());
-            log.info("------------- Start writer/read, worker1111111 number is {} ---------------", workers.size());
+            log.info("------------- Start writer/read, worker number is {} ---------------", workers.size());
             executor.invokeAll(workers);
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
@@ -429,6 +430,7 @@ public class PravegaPerfTest {
         final EventStreamClientFactory factory;
         final List<ReaderGroup> readerGroups = new ArrayList<>();
         final HashMap<String, String> streamMap = new HashMap<>();
+        final AtomicLong seqNum = new AtomicLong(1);
 
         PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
@@ -444,7 +446,7 @@ public class PravegaPerfTest {
                     bgExecutor);
 
             for (int i = 0; i < streamNum; i++) {
-                String newStreamName = streamName + "-" + i;
+                String newStreamName = streamName + i;
                 String newRdGrpName = rdGrpName + "-" + i;
                 PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, newStreamName, newRdGrpName, controllerUri, segmentCount,
                         segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
@@ -487,7 +489,7 @@ public class PravegaPerfTest {
                                                 produceStats, streamName,
                                                 eventsPerSec, writeAndRead, factory,
                                                 transactionPerCommit, enableConnectionPooling,
-                                                enableWatermark))
+                                                enableWatermark, seqNum))
                                 .collect(Collectors.toList());
                     } else {
                         writers = IntStream.range(0, producerCount)
@@ -496,7 +498,7 @@ public class PravegaPerfTest {
                                         EventsPerFlush, runtimeSec, false,
                                         messageSize, startTime, produceStats,
                                         streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
-                                        writeWatermarkPeriodMillis))
+                                        writeWatermarkPeriodMillis, seqNum))
                                 .collect(Collectors.toList());
                     }
                     log.info("---------- Create {} writes for stream {} ----------", writers.size(), streamName);

@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PravegaTransactionWriterWorker extends WriterWorker {
     private static Logger log = LoggerFactory.getLogger(PravegaTransactionWriterWorker.class);
@@ -47,10 +48,10 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                                    int messageSize, long start,
                                    PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
                                    EventStreamClientFactory factory, int transactionsPerCommit, boolean enableConnectionPooling,
-                                   boolean enableWatermark) {
+                                   boolean enableWatermark, AtomicLong seqNum) {
         super(sensorId, events, Integer.MAX_VALUE,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum);
 
         final String writerId = UUID.randomUUID().toString();
         this.producer = factory.createTransactionalEventWriter(
@@ -84,6 +85,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                 if (transaction == null) {
                     transaction = producer.beginTxn();
                 }
+                log.info("Event write: {}", new String(data));
                 transaction.writeEvent(data);
                 record.accept(time, System.currentTimeMillis(), messageSize);
                 eventCount++;

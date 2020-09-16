@@ -13,6 +13,7 @@ package io.pravega.perf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.EventStreamWriter;
@@ -33,9 +34,7 @@ public class PravegaWriterWorker extends WriterWorker {
 
     // No guard is required for nextNoteTime because it is only used by one thread per instance.
     private long nextNoteTime = System.currentTimeMillis();
-
-    private List<String> dataList = new ArrayList<>();
-
+    
     /**
      * Construct a PravegaWriterWorker.
      *
@@ -47,11 +46,11 @@ public class PravegaWriterWorker extends WriterWorker {
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
                         boolean writeAndRead, EventStreamClientFactory factory,
-                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis) {
+                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis, AtomicLong seqNum) {
 
         super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum);
 
         this.producer = factory.createEventWriter(streamName,
                 new ByteArraySerializer(),
@@ -68,8 +67,6 @@ public class PravegaWriterWorker extends WriterWorker {
         ret = producer.writeEvent(data);
 //        recordData(data);
         log.info("Event write: {}", new String(data));
-        dataList.add(new String(data));
-        log.info("Event size: {}", dataList.size());
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });
@@ -81,8 +78,6 @@ public class PravegaWriterWorker extends WriterWorker {
     public void writeData(byte[] data) {
         // record data to csv
         log.info("Event write: {}", new String(data));
-        dataList.add(new String(data));
-        log.info("Event size: {}", dataList.size());
         producer.writeEvent(data);
 //        recordData(data);
         noteTimePeriodically();
