@@ -430,7 +430,6 @@ public class PravegaPerfTest {
         final EventStreamClientFactory factory;
         final List<ReaderGroup> readerGroups = new ArrayList<>();
         final HashMap<String, String> streamMap = new HashMap<>();
-        final AtomicLong seqNum = new AtomicLong(1);
 
         PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
@@ -476,7 +475,9 @@ public class PravegaPerfTest {
             if (producerCount > 0) {
                 allWriters = new ArrayList<>();
                 streamMap.forEach((streamName, readerGroup) -> {
+                    final AtomicLong seqNum = new AtomicLong(1);
                     final List<WriterWorker> writers;
+
                     if (transactionPerCommit > 0) {
                         final boolean enableWatermark = writeWatermarkPeriodMillis >= 0;
 
