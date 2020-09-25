@@ -28,16 +28,21 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private static Logger log = LoggerFactory.getLogger(WriterWorker.class);
 
     final private static int MS_PER_SEC = 1000;
+    final private int ROUTING_KEY_NUM = 10;
+    final private Random random = new Random();
+    final private String[] routingKeyArray;
     final private Performance perf;
-//    final private byte[] payload;
+    //    final private byte[] payload;
     final private int eventsPerSec;
     final private int EventsPerFlush;
     final private boolean writeAndRead;
-    final private AtomicLong seqNum;
+    final private AtomicLong[] seqNum;
+    final private Boolean isEnableRoutingKey;
 
     WriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead, AtomicLong seqNum) {
+                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead, AtomicLong[] seqNum,
+                 Boolean isEnableRoutingKey) {
 
         super(sensorId, events, secondsToRun, messageSize, start, stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
@@ -46,18 +51,30 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
 //        this.payload = createPayload();
         this.perf = createBenchmark();
         this.seqNum = seqNum;
+        this.isEnableRoutingKey = isEnableRoutingKey;
+        this.routingKeyArray = getRoutingKeyArray();
+    }
+
+    private String[] getRoutingKeyArray() {
+        String[] routingKeys = new String[ROUTING_KEY_NUM];
+        for (int i = 0; i < ROUTING_KEY_NUM; i++) {
+            routingKeys[i] = "routingKey" + i;
+        }
+        return routingKeys;
     }
 
 
     private byte[] createPayload() {
-//        Random random = new Random();
-//        byte[] bytes = new byte[size];
-//        for (int i = 0; i < size; ++i) {
-//            bytes[i] = (byte) (random.nextInt(26) + 65);
-//        }
-//        return bytes;
-        Long count = seqNum.getAndIncrement();
-        String event = streamName + "-" + count + "-" + System.currentTimeMillis();
+        String event;
+        if(this.isEnableRoutingKey) {
+            int index = random.nextInt(ROUTING_KEY_NUM);
+            Long count = seqNum[index].getAndIncrement();
+            String routingKey = routingKeyArray[index];
+            event = streamName + "-" + routingKey + "-" + count + "-" + System.currentTimeMillis();
+        } else {
+            Long count = seqNum[0].getAndIncrement();
+            event = streamName + "-" + count + "-" + System.currentTimeMillis();
+        }
 
         return event.getBytes();
     }

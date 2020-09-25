@@ -46,11 +46,12 @@ public class PravegaWriterWorker extends WriterWorker {
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
                         boolean writeAndRead, EventStreamClientFactory factory,
-                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis, AtomicLong seqNum) {
+                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis, AtomicLong[] seqNum,
+                        Boolean isEnableRoutingKey) {
 
         super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead, seqNum);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum, isEnableRoutingKey);
 
         this.producer = factory.createEventWriter(streamName,
                 new ByteArraySerializer(),
@@ -64,9 +65,9 @@ public class PravegaWriterWorker extends WriterWorker {
     public long recordWrite(byte[] data, TriConsumer record) {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
+        log.info("Event write: {}", new String(data));
         ret = producer.writeEvent(data);
 //        recordData(data);
-        log.info("Event write: {}", new String(data));
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });

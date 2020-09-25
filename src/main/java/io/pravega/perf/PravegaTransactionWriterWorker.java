@@ -48,10 +48,10 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                                    int messageSize, long start,
                                    PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
                                    EventStreamClientFactory factory, int transactionsPerCommit, boolean enableConnectionPooling,
-                                   boolean enableWatermark, AtomicLong seqNum) {
+                                   boolean enableWatermark, AtomicLong[] seqNum, Boolean isEnableRoutingKey) {
         super(sensorId, events, Integer.MAX_VALUE,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead, seqNum);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum, isEnableRoutingKey);
 
         final String writerId = UUID.randomUUID().toString();
         this.producer = factory.createTransactionalEventWriter(

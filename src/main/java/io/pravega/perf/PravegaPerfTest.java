@@ -64,6 +64,7 @@ public class PravegaPerfTest {
         options.addOption("scope", true, "Scope name");
         options.addOption("stream", true, "Stream name");
         options.addOption("streamNum", true, "Stream number");
+        options.addOption("enableRoutingKey", true, "Is enable routingKey");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
@@ -235,6 +236,7 @@ public class PravegaPerfTest {
         final int reportingInterval;
         final boolean createScope;
         final boolean validateHostName;
+        final boolean isEnableRoutingKey;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -244,6 +246,7 @@ public class PravegaPerfTest {
             consumerCount = parseIntOption(commandline, "consumers", 0);
             streamNum = parseIntOption(commandline, "streamNum", 1);
             events = parseIntOption(commandline, "events", 0);
+            isEnableRoutingKey = parseBooleanOption(commandline, "enableRoutingKey", false);
 
             if (commandline.hasOption("flush")) {
                 int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
@@ -416,6 +419,14 @@ public class PravegaPerfTest {
             }
         }
 
+        private Boolean parseBooleanOption(CommandLine commandline, String option, Boolean defaultValue) {
+            if (commandline.hasOption(option)) {
+                return Boolean.parseBoolean(commandline.getOptionValue(option));
+            } else {
+                return defaultValue;
+            }
+        }
+
         private String parseStringOption(CommandLine commandline, String option, String defaultValue) {
             if (commandline.hasOption(option)) {
                 return String.valueOf(commandline.getOptionValue(option));
@@ -430,6 +441,7 @@ public class PravegaPerfTest {
         final EventStreamClientFactory factory;
         final List<ReaderGroup> readerGroups = new ArrayList<>();
         final HashMap<String, String> streamMap = new HashMap<>();
+        final int AUTOMIC_NUM = 10;
 
         PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
@@ -469,13 +481,22 @@ public class PravegaPerfTest {
             factory = new ClientFactoryImpl(scopeName, controller, new SocketConnectionFactoryImpl(clientConfig));
         }
 
+        private AtomicLong[] getAtomicNum() {
+            AtomicLong[] seqNumArray = new AtomicLong[AUTOMIC_NUM];
+            for (int i = 0; i < AUTOMIC_NUM; i++) {
+                AtomicLong seqNum = new AtomicLong(1);
+                seqNumArray[i] = seqNum;
+            }
+            return seqNumArray;
+        }
+
         public List<WriterWorker> getProducers() {
             final List<WriterWorker> allWriters;
 
             if (producerCount > 0) {
                 allWriters = new ArrayList<>();
                 streamMap.forEach((streamName, readerGroup) -> {
-                    final AtomicLong seqNum = new AtomicLong(1);
+                    final AtomicLong[] seqNum = getAtomicNum();
                     final List<WriterWorker> writers;
 
                     if (transactionPerCommit > 0) {
@@ -490,7 +511,7 @@ public class PravegaPerfTest {
                                                 produceStats, streamName,
                                                 eventsPerSec, writeAndRead, factory,
                                                 transactionPerCommit, enableConnectionPooling,
-                                                enableWatermark, seqNum))
+                                                enableWatermark, seqNum, isEnableRoutingKey))
                                 .collect(Collectors.toList());
                     } else {
                         writers = IntStream.range(0, producerCount)
@@ -499,7 +520,7 @@ public class PravegaPerfTest {
                                         EventsPerFlush, runtimeSec, false,
                                         messageSize, startTime, produceStats,
                                         streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
-                                        writeWatermarkPeriodMillis, seqNum))
+                                        writeWatermarkPeriodMillis, seqNum, isEnableRoutingKey))
                                 .collect(Collectors.toList());
                     }
                     log.info("---------- Create {} writes for stream {} ----------", writers.size(), streamName);
