@@ -31,6 +31,7 @@ public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<byte[]> producer;
 
     private final long writeWatermarkPeriodMillis;
+    final private Boolean isEnableRoutingKey;
 
     // No guard is required for nextNoteTime because it is only used by one thread per instance.
     private long nextNoteTime = System.currentTimeMillis();
@@ -59,6 +60,7 @@ public class PravegaWriterWorker extends WriterWorker {
                         .enableConnectionPooling(enableConnectionPooling)
                         .build());
         this.writeWatermarkPeriodMillis = writeWatermarkPeriodMillis;
+        this.isEnableRoutingKey = isEnableRoutingKey;
     }
 
     @Override
@@ -66,8 +68,7 @@ public class PravegaWriterWorker extends WriterWorker {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
         log.info("Event write: {}", new String(data));
-        ret = producer.writeEvent(data);
-//        recordData(data);
+        ret = writeEvent(producer, data);
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });
@@ -77,22 +78,24 @@ public class PravegaWriterWorker extends WriterWorker {
 
     @Override
     public void writeData(byte[] data) {
-        // record data to csv
+        writeEvent(producer, data);
         log.info("Event write: {}", new String(data));
         producer.writeEvent(data);
-//        recordData(data);
         noteTimePeriodically();
     }
 
-//    private void recordData(byte[] data) {
-//        log.info("record data");
-//        dataList.add(new String(data));
-//        if(dataList.size() >= 100) {
-//            log.info("start record data, size is {}", dataList);
-//            CSVUtils.importCSV("/root/", dataList);
-//            dataList = new ArrayList<>();
-//        }
-//    }
+
+    public CompletableFuture writeEvent(EventStreamWriter<byte[]> producer, byte[] data) {
+        CompletableFuture ret;
+        if(isEnableRoutingKey) {
+            String dataString = new String(data);
+            String routingKey = dataString.split("-")[1];
+            ret = producer.writeEvent(routingKey, data);
+        } else {
+            ret = producer.writeEvent(data);
+        }
+        return ret;
+    }
 
     private void noteTimePeriodically() {
         if (writeWatermarkPeriodMillis >= 0) {

@@ -31,6 +31,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
     private final TransactionalEventStreamWriter<byte[]> producer;
     private final int transactionsPerCommit;
     private final boolean enableWatermark;
+    final private Boolean isEnableRoutingKey;
 
     @GuardedBy("this")
     private int eventCount;
@@ -63,6 +64,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                         .build());
         this.transactionsPerCommit = transactionsPerCommit;
         this.enableWatermark = enableWatermark;
+        this.isEnableRoutingKey = isEnableRoutingKey;
 
         eventCount = 0;
     }
@@ -86,7 +88,14 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                     transaction = producer.beginTxn();
                 }
                 log.info("Event write: {}", new String(data));
-                transaction.writeEvent(data);
+                if(isEnableRoutingKey) {
+                    String dataString = new String(data);
+                    String routingKey = dataString.split("-")[1];
+                    transaction.writeEvent(routingKey, data);
+
+                } else {
+                    transaction.writeEvent(data);
+                }
                 record.accept(time, System.currentTimeMillis(), messageSize);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {
