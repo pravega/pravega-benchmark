@@ -19,6 +19,7 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Abstract class for Writers.
@@ -27,32 +28,55 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private static Logger log = LoggerFactory.getLogger(WriterWorker.class);
 
     final private static int MS_PER_SEC = 1000;
+    final private int ROUTING_KEY_NUM = 10;
+    final private Random random = new Random();
+    final private String[] routingKeyArray;
     final private Performance perf;
-    final private byte[] payload;
+    //    final private byte[] payload;
     final private int eventsPerSec;
     final private int EventsPerFlush;
     final private boolean writeAndRead;
+    final private AtomicLong[] seqNum;
+    final private Boolean isEnableRoutingKey;
 
     WriterWorker(int sensorId, int events, int EventsPerFlush, int secondsToRun,
                  boolean isRandomKey, int messageSize, long start,
-                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead) {
+                 PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead, AtomicLong[] seqNum,
+                 Boolean isEnableRoutingKey) {
 
         super(sensorId, events, secondsToRun, messageSize, start, stats, streamName, 0);
         this.eventsPerSec = eventsPerSec;
         this.EventsPerFlush = EventsPerFlush;
         this.writeAndRead = writeAndRead;
-        this.payload = createPayload(messageSize);
+//        this.payload = createPayload();
         this.perf = createBenchmark();
+        this.seqNum = seqNum;
+        this.isEnableRoutingKey = isEnableRoutingKey;
+        this.routingKeyArray = getRoutingKeyArray();
+    }
+
+    private String[] getRoutingKeyArray() {
+        String[] routingKeys = new String[ROUTING_KEY_NUM];
+        for (int i = 0; i < ROUTING_KEY_NUM; i++) {
+            routingKeys[i] = "routingKey" + i;
+        }
+        return routingKeys;
     }
 
 
-    private byte[] createPayload(int size) {
-        Random random = new Random();
-        byte[] bytes = new byte[size];
-        for (int i = 0; i < size; ++i) {
-            bytes[i] = (byte) (random.nextInt(26) + 65);
+    private byte[] createPayload() {
+        String event;
+        if(this.isEnableRoutingKey) {
+            int index = random.nextInt(ROUTING_KEY_NUM);
+            Long count = seqNum[index].getAndIncrement();
+            String routingKey = routingKeyArray[index];
+            event = streamName + "-" + routingKey + "-" + count + "-" + System.currentTimeMillis();
+        } else {
+            Long count = seqNum[0].getAndIncrement();
+            event = streamName + "-" + count + "-" + System.currentTimeMillis();
         }
-        return bytes;
+
+        return event.getBytes();
     }
 
 
@@ -125,7 +149,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
     private void EventsWriter() throws InterruptedException, IOException {
         log.info("EventsWriter: Running");
         for (int i = 0; i < events; i++) {
-            recordWrite(payload, stats::recordTime);
+            byte[] data = createPayload();
+            recordWrite(data, stats::recordTime);
         }
         flush();
     }
@@ -138,7 +163,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         while (cnt < events) {
             int loopMax = Math.min(EventsPerFlush, events - cnt);
             for (int i = 0; i < loopMax; i++) {
-                eCnt.control(cnt++, recordWrite(payload, stats::recordTime));
+                byte[] data = createPayload();
+                eCnt.control(cnt++, recordWrite(data, stats::recordTime));
             }
             flush();
         }
@@ -150,7 +176,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final long msToRun = secondsToRun * MS_PER_SEC;
         long time = System.currentTimeMillis();
         while ((time - startTime) < msToRun) {
-            time = recordWrite(payload, stats::recordTime);
+            byte[] data = createPayload();
+            time = recordWrite(data, stats::recordTime);
         }
         flush();
     }
@@ -165,7 +192,8 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         int cnt = 0;
         while (msElapsed < msToRun) {
             for (int i = 0; (msElapsed < msToRun) && (i < EventsPerFlush); i++) {
-                time = recordWrite(payload, stats::recordTime);
+                byte[] data = createPayload();
+                time = recordWrite(data, stats::recordTime);
                 eCnt.control(cnt++, time);
                 msElapsed = time - startTime;
             }
@@ -180,9 +208,10 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final long time = System.currentTimeMillis();
         final EventsController eCnt = new EventsController(time, eventsPerSec);
         for (int i = 0; i < events; i++) {
+            byte[] data = createPayload();
             byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
-            System.arraycopy(bytes, 0, payload, 0, bytes.length);
-            writeData(payload);
+            System.arraycopy(bytes, 0, data, 0, bytes.length);
+            writeData(data);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.
@@ -190,9 +219,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                    flushing moderates the kafka producer.
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
-            flush();
             eCnt.control(i);
         }
+        flush();
     }
 
 
@@ -204,10 +233,11 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
         final EventsController eCnt = new EventsController(time, eventsPerSec);
 
         for (int i = 0; (time - startTime) < msToRun; i++) {
+            byte[] data = createPayload();
             time = System.currentTimeMillis();
             byte[] bytes = timeBuffer.putLong(0, System.currentTimeMillis()).array();
-            System.arraycopy(bytes, 0, payload, 0, bytes.length);
-            writeData(payload);
+            System.arraycopy(bytes, 0, data, 0, bytes.length);
+            writeData(data);
                 /*
                 flush is required here for following reasons:
                 1. The writeData is called for End to End latency mode; hence make sure that data is sent.
@@ -215,9 +245,9 @@ public abstract class WriterWorker extends Worker implements Callable<Void> {
                    flushing moderates the kafka producer.
                 3. If the flush called after several iterations, then flush may take too much of time.
                 */
-            flush();
             eCnt.control(i);
         }
+        flush();
     }
 
 

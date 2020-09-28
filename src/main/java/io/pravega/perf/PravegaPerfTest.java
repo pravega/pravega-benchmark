@@ -30,6 +30,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -37,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -59,6 +63,8 @@ public class PravegaPerfTest {
         options.addOption("controller", true, "Controller URI");
         options.addOption("scope", true, "Scope name");
         options.addOption("stream", true, "Stream name");
+        options.addOption("streamNum", true, "Stream number");
+        options.addOption("enableRoutingKey", true, "Is enable routingKey");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
@@ -128,6 +134,8 @@ public class PravegaPerfTest {
         try {
             final List<WriterWorker> producers = perfTest.getProducers();
             final List<ReaderWorker> consumers = perfTest.getConsumers();
+//            log.info("------------- Start writer, writer number is {} ---------------", producers.size());
+//            log.info("------------- Start read, read number is {} ---------------", consumers.size());
 
             final List<Callable<Void>> workers = Stream.of(consumers, producers)
                     .filter(x -> x != null)
@@ -154,6 +162,7 @@ public class PravegaPerfTest {
                 }
             });
             perfTest.start(System.currentTimeMillis());
+            log.info("------------- Start writer/read, worker number is {} ---------------", workers.size());
             executor.invokeAll(workers);
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.SECONDS);
@@ -202,6 +211,7 @@ public class PravegaPerfTest {
         final int producerCount;
         final int consumerCount;
         final int segmentCount;
+        final int streamNum;
         final int segmentScaleKBps;
         final int segmentScaleEventsPerSecond;
         final int scaleFactor;
@@ -226,6 +236,7 @@ public class PravegaPerfTest {
         final int reportingInterval;
         final boolean createScope;
         final boolean validateHostName;
+        final boolean isEnableRoutingKey;
 
         Test(long startTime, CommandLine commandline) throws IllegalArgumentException {
             this.startTime = startTime;
@@ -233,7 +244,9 @@ public class PravegaPerfTest {
             controllerUri = parseStringOption(commandline, "controller", null);
             producerCount = parseIntOption(commandline, "producers", 0);
             consumerCount = parseIntOption(commandline, "consumers", 0);
+            streamNum = parseIntOption(commandline, "streamNum", 1);
             events = parseIntOption(commandline, "events", 0);
+            isEnableRoutingKey = parseBooleanOption(commandline, "enableRoutingKey", false);
 
             if (commandline.hasOption("flush")) {
                 int flushEvents = Integer.parseInt(commandline.getOptionValue("flush"));
@@ -406,6 +419,14 @@ public class PravegaPerfTest {
             }
         }
 
+        private Boolean parseBooleanOption(CommandLine commandline, String option, Boolean defaultValue) {
+            if (commandline.hasOption(option)) {
+                return Boolean.parseBoolean(commandline.getOptionValue(option));
+            } else {
+                return defaultValue;
+            }
+        }
+
         private String parseStringOption(CommandLine commandline, String option, String defaultValue) {
             if (commandline.hasOption(option)) {
                 return String.valueOf(commandline.getOptionValue(option));
@@ -416,9 +437,11 @@ public class PravegaPerfTest {
     }
 
     static private class PravegaTest extends Test {
-        final PravegaStreamHandler streamHandle;
+//        final PravegaStreamHandler streamHandle;
         final EventStreamClientFactory factory;
-        final ReaderGroup readerGroup;
+        final List<ReaderGroup> readerGroups = new ArrayList<>();
+        final HashMap<String, String> streamMap = new HashMap<>();
+        final int AUTOMIC_NUM = 10;
 
         PravegaTest(long startTime, CommandLine commandline) throws Exception {
             super(startTime, commandline);
@@ -433,79 +456,114 @@ public class PravegaPerfTest {
                     .maxBackoffMillis(5000).build(),
                     bgExecutor);
 
-            streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
-                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
+            for (int i = 0; i < streamNum; i++) {
+                String newStreamName = streamName + i;
+                String newRdGrpName = rdGrpName + "-" + i;
+                PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, newStreamName, newRdGrpName, controllerUri, segmentCount,
+                        segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
 
-            if (producerCount > 0 && segmentCount > 0 && !streamHandle.create()) {
-                if (recreate) {
-                    streamHandle.recreate();
-                } else {
-                    streamHandle.scale();
+                if (producerCount > 0 && segmentCount > 0 && !streamHandle.create()) {
+                    if (recreate) {
+                        streamHandle.recreate();
+                    } else {
+                        streamHandle.scale();
+                    }
                 }
+                log.info("--------------- Create new stream {} ------------------", newStreamName);
+                if (consumerCount > 0) {
+                    ReaderGroup readerGroup = streamHandle.createReaderGroup(!writeAndRead, clientConfig);
+                    readerGroups.add(readerGroup);
+                    log.info("-------------- Create new reader group {} -------------------", newRdGrpName);
+                }
+                streamMap.put(newStreamName, newRdGrpName);
             }
 
-            if (consumerCount > 0) {
-                readerGroup = streamHandle.createReaderGroup(!writeAndRead, clientConfig);
-            } else {
-                readerGroup = null;
-            }
             factory = new ClientFactoryImpl(scopeName, controller, new SocketConnectionFactoryImpl(clientConfig));
         }
 
+        private AtomicLong[] getAtomicNum() {
+            AtomicLong[] seqNumArray = new AtomicLong[AUTOMIC_NUM];
+            for (int i = 0; i < AUTOMIC_NUM; i++) {
+                AtomicLong seqNum = new AtomicLong(1);
+                seqNumArray[i] = seqNum;
+            }
+            return seqNumArray;
+        }
+
         public List<WriterWorker> getProducers() {
-            final List<WriterWorker> writers;
+            final List<WriterWorker> allWriters;
 
             if (producerCount > 0) {
-                if (transactionPerCommit > 0) {
-                    final boolean enableWatermark = writeWatermarkPeriodMillis >= 0;
-                    writers = IntStream.range(0, producerCount)
-                            .boxed()
-                            .map(i -> new PravegaTransactionWriterWorker(i, eventsPerProducer,
-                                    runtimeSec, false,
-                                    messageSize, startTime,
-                                    produceStats, streamName,
-                                    eventsPerSec, writeAndRead, factory,
-                                    transactionPerCommit, enableConnectionPooling,
-                                    enableWatermark))
-                            .collect(Collectors.toList());
-                } else {
-                    writers = IntStream.range(0, producerCount)
-                            .boxed()
-                            .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
-                                    EventsPerFlush, runtimeSec, false,
-                                    messageSize, startTime, produceStats,
-                                    streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
-                                    writeWatermarkPeriodMillis))
-                            .collect(Collectors.toList());
-                }
+                allWriters = new ArrayList<>();
+                streamMap.forEach((streamName, readerGroup) -> {
+                    final AtomicLong[] seqNum = getAtomicNum();
+                    final List<WriterWorker> writers;
+
+                    if (transactionPerCommit > 0) {
+                        final boolean enableWatermark = writeWatermarkPeriodMillis >= 0;
+
+                        writers = IntStream.range(0, producerCount)
+                                .boxed()
+                                .map(i ->
+                                        new PravegaTransactionWriterWorker(i, eventsPerProducer,
+                                                runtimeSec, false,
+                                                messageSize, startTime,
+                                                produceStats, streamName,
+                                                eventsPerSec, writeAndRead, factory,
+                                                transactionPerCommit, enableConnectionPooling,
+                                                enableWatermark, seqNum, isEnableRoutingKey))
+                                .collect(Collectors.toList());
+                    } else {
+                        writers = IntStream.range(0, producerCount)
+                                .boxed()
+                                .map(i -> new PravegaWriterWorker(i, eventsPerProducer,
+                                        EventsPerFlush, runtimeSec, false,
+                                        messageSize, startTime, produceStats,
+                                        streamName, eventsPerSec, writeAndRead, factory, enableConnectionPooling,
+                                        writeWatermarkPeriodMillis, seqNum, isEnableRoutingKey))
+                                .collect(Collectors.toList());
+                    }
+                    log.info("---------- Create {} writes for stream {} ----------", writers.size(), streamName);
+                    allWriters.addAll(writers);
+                });
             } else {
-                writers = null;
+                allWriters = null;
             }
 
-            return writers;
+            return allWriters;
         }
 
         public List<ReaderWorker> getConsumers() throws URISyntaxException {
-            final List<ReaderWorker> readers;
+            final List<ReaderWorker> allReaders;
             if (consumerCount > 0) {
-                readers = IntStream.range(0, consumerCount)
-                        .boxed()
-                        .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
-                                runtimeSec, startTime, consumeStats,
-                                rdGrpName, TIMEOUT, writeAndRead, factory,
-                                io.pravega.client.stream.Stream.of(scopeName, streamName),
-                                readWatermarkPeriodMillis))
-                        .collect(Collectors.toList());
+                allReaders = new ArrayList<>();
+                streamMap.forEach((streamName, rdGrpName) -> {
+                    final List<ReaderWorker> readers;
+                    readers = IntStream.range(0, consumerCount)
+                            .boxed()
+                            .map(i -> new PravegaReaderWorker(i, eventsPerConsumer,
+                                    runtimeSec, startTime, consumeStats,
+                                    rdGrpName, TIMEOUT, writeAndRead, factory,
+                                    io.pravega.client.stream.Stream.of(scopeName, streamName),
+                                    readWatermarkPeriodMillis))
+                            .collect(Collectors.toList());
+                    log.info("---------- Create {} readers for stream {} ----------", readers.size(), streamName);
+                    allReaders.addAll(readers);
+                });
+
             } else {
-                readers = null;
+                allReaders = null;
             }
-            return readers;
+            return allReaders;
         }
 
         @Override
         public void closeReaderGroup() {
-            if (readerGroup != null) {
-                readerGroup.close();
+            if (readerGroups.size() != 0) {
+                Iterator<ReaderGroup> readerGroupIterator = readerGroups.iterator();
+                while (readerGroupIterator.hasNext()) {
+                    readerGroupIterator.next().close();
+                }
             }
         }
 

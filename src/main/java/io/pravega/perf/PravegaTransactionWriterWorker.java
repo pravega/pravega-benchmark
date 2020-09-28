@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class PravegaTransactionWriterWorker extends WriterWorker {
     private static Logger log = LoggerFactory.getLogger(PravegaTransactionWriterWorker.class);
@@ -30,6 +31,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
     private final TransactionalEventStreamWriter<byte[]> producer;
     private final int transactionsPerCommit;
     private final boolean enableWatermark;
+    final private Boolean isEnableRoutingKey;
 
     @GuardedBy("this")
     private int eventCount;
@@ -47,10 +49,10 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                                    int messageSize, long start,
                                    PerfStats stats, String streamName, int eventsPerSec, boolean writeAndRead,
                                    EventStreamClientFactory factory, int transactionsPerCommit, boolean enableConnectionPooling,
-                                   boolean enableWatermark) {
+                                   boolean enableWatermark, AtomicLong[] seqNum, Boolean isEnableRoutingKey) {
         super(sensorId, events, Integer.MAX_VALUE,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum, isEnableRoutingKey);
 
         final String writerId = UUID.randomUUID().toString();
         this.producer = factory.createTransactionalEventWriter(
@@ -62,6 +64,7 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                         .build());
         this.transactionsPerCommit = transactionsPerCommit;
         this.enableWatermark = enableWatermark;
+        this.isEnableRoutingKey = isEnableRoutingKey;
 
         eventCount = 0;
     }
@@ -84,7 +87,15 @@ public class PravegaTransactionWriterWorker extends WriterWorker {
                 if (transaction == null) {
                     transaction = producer.beginTxn();
                 }
-                transaction.writeEvent(data);
+                log.info("Event write: {}", new String(data));
+                if(isEnableRoutingKey) {
+                    String dataString = new String(data);
+                    String routingKey = dataString.split("-")[1];
+                    transaction.writeEvent(routingKey, data);
+
+                } else {
+                    transaction.writeEvent(data);
+                }
                 record.accept(time, System.currentTimeMillis(), messageSize);
                 eventCount++;
                 if (eventCount >= transactionsPerCommit) {

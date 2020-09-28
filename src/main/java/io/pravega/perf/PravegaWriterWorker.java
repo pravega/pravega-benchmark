@@ -10,7 +10,10 @@
 
 package io.pravega.perf;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.pravega.client.EventStreamClientFactory;
 import io.pravega.client.stream.EventStreamWriter;
@@ -28,10 +31,11 @@ public class PravegaWriterWorker extends WriterWorker {
     final EventStreamWriter<byte[]> producer;
 
     private final long writeWatermarkPeriodMillis;
+    final private Boolean isEnableRoutingKey;
 
     // No guard is required for nextNoteTime because it is only used by one thread per instance.
     private long nextNoteTime = System.currentTimeMillis();
-
+    
     /**
      * Construct a PravegaWriterWorker.
      *
@@ -43,11 +47,12 @@ public class PravegaWriterWorker extends WriterWorker {
                         boolean isRandomKey, int messageSize, long start,
                         PerfStats stats, String streamName, int eventsPerSec,
                         boolean writeAndRead, EventStreamClientFactory factory,
-                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis) {
+                        boolean enableConnectionPooling, long writeWatermarkPeriodMillis, AtomicLong[] seqNum,
+                        Boolean isEnableRoutingKey) {
 
         super(sensorId, events, EventsPerFlush,
                 secondsToRun, isRandomKey, messageSize, start,
-                stats, streamName, eventsPerSec, writeAndRead);
+                stats, streamName, eventsPerSec, writeAndRead, seqNum, isEnableRoutingKey);
 
         this.producer = factory.createEventWriter(streamName,
                 new ByteArraySerializer(),
@@ -55,13 +60,15 @@ public class PravegaWriterWorker extends WriterWorker {
                         .enableConnectionPooling(enableConnectionPooling)
                         .build());
         this.writeWatermarkPeriodMillis = writeWatermarkPeriodMillis;
+        this.isEnableRoutingKey = isEnableRoutingKey;
     }
 
     @Override
     public long recordWrite(byte[] data, TriConsumer record) {
         CompletableFuture ret;
         final long time = System.currentTimeMillis();
-        ret = producer.writeEvent(data);
+        log.info("Event write: {}", new String(data));
+        ret = writeEvent(producer, data);
         ret.thenAccept(d -> {
             record.accept(time, System.currentTimeMillis(), data.length);
         });
@@ -71,8 +78,23 @@ public class PravegaWriterWorker extends WriterWorker {
 
     @Override
     public void writeData(byte[] data) {
+        writeEvent(producer, data);
+        log.info("Event write: {}", new String(data));
         producer.writeEvent(data);
         noteTimePeriodically();
+    }
+
+
+    public CompletableFuture writeEvent(EventStreamWriter<byte[]> producer, byte[] data) {
+        CompletableFuture ret;
+        if(isEnableRoutingKey) {
+            String dataString = new String(data);
+            String routingKey = dataString.split("-")[1];
+            ret = producer.writeEvent(routingKey, data);
+        } else {
+            ret = producer.writeEvent(data);
+        }
+        return ret;
     }
 
     private void noteTimePeriodically() {
