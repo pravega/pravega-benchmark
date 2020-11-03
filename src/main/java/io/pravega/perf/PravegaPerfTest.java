@@ -458,6 +458,9 @@ public class PravegaPerfTest {
 
             for (int i = 0; i < streamNum; i++) {
                 String newStreamName = streamName + i;
+                if(streamNum == 1) {
+                    newStreamName = streamName;
+                }
                 String newRdGrpName = rdGrpName + "-" + i;
                 PravegaStreamHandler streamHandle = new PravegaStreamHandler(scopeName, newStreamName, newRdGrpName, controllerUri, segmentCount,
                         segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
