@@ -10,7 +10,9 @@
 
 package io.pravega.perf;
 
+import io.pravega.client.stream.RetentionPolicy;
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -55,13 +57,16 @@ public class PravegaStreamHandler {
     final int segmentScaleKBps;
     final int segmentScaleEventsPerSecond;
     final int scaleFactor;
+    final String retentionType;
+    final int retentionValue;
 
     ReaderGroupManager readerGroupManager;
     ReaderGroupConfig rdGrpConfig;
 
     PravegaStreamHandler(String scope, String stream, String rdGrpName, String uri, int segments, int segmentScaleKBps,
                          int segmentScaleEventsPerSecond, int scaleFactor, int timeout, ControllerImpl controller,
-                         ScheduledExecutorService bgexecutor, boolean createScope) throws Exception {
+                         ScheduledExecutorService bgexecutor, boolean createScope, String retentionType,
+                         int retentionValue) throws Exception {
         this.scope = scope;
         this.stream = stream;
         this.rdGrpName = rdGrpName;
@@ -74,6 +79,8 @@ public class PravegaStreamHandler {
         this.segmentScaleKBps = segmentScaleKBps;
         this.segmentScaleEventsPerSecond = segmentScaleEventsPerSecond;
         this.streamManager = StreamManager.create(new URI(uri));
+        this.retentionType = retentionType;
+        this.retentionValue = retentionValue;
 
         if (createScope) {
             this.streamManager.createScope(scope);
@@ -179,9 +186,23 @@ public class PravegaStreamHandler {
         } else if (segmentScaleEventsPerSecond > 0) {
             scalingPolicy = ScalingPolicy.byEventRate(segmentScaleEventsPerSecond, scaleFactor, segCount);
         }
+        if (retentionType == null) {
+            return StreamConfiguration.builder()
+                                      .scalingPolicy(scalingPolicy)
+                                      .build();
+        } else {
+            RetentionPolicy retentionPolicy = null;
+            if (retentionType.equalsIgnoreCase("TIME")) {
+                retentionPolicy = RetentionPolicy.byTime(Duration.ofMinutes(retentionValue));
+            } else {
+                retentionPolicy = RetentionPolicy.bySizeBytes(retentionValue);
+            }
+            return StreamConfiguration.builder()
+                                      .scalingPolicy(scalingPolicy)
+                                      .retentionPolicy(retentionPolicy)
+                                      .build();
+        }
 
-        return StreamConfiguration.builder()
-            .scalingPolicy(scalingPolicy)
-            .build();
+
     }
 }
