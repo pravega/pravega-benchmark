@@ -59,6 +59,10 @@ public class PravegaPerfTest {
         options.addOption("controller", true, "Controller URI");
         options.addOption("scope", true, "Scope name");
         options.addOption("stream", true, "Stream name");
+        options.addOption("streamRetentionType", true, "Retention type for stream: TIME/SIZE");
+        options.addOption("streamRetentionValue", true, "Retention value for stream. If retention" +
+                "type is by TIME then give value as no of minutes else if retention type is by SIZE then give value " +
+                "as size in bytes.");
         options.addOption("producers", true, "Number of producers");
         options.addOption("consumers", true, "Number of consumers");
         options.addOption("events", true,
@@ -195,6 +199,8 @@ public class PravegaPerfTest {
         final String controllerUri;
         final int messageSize;
         final String streamName;
+        final String retentionType;
+        final int retentionValue;
         final String rdGrpName;
         final String scopeName;
         final boolean recreate;
@@ -257,6 +263,8 @@ public class PravegaPerfTest {
             messageSize = parseIntOption(commandline, "size", 0);
             streamName = parseStringOption(commandline, "stream", null);
             scopeName = parseStringOption(commandline, "scope", SCOPE);
+            retentionType = parseStringOption(commandline, "streamRetentionType", null);
+            retentionValue = parseIntOption(commandline, "streamRetentionValue", 0);
             transactionPerCommit = parseIntOption(commandline, "transactionspercommit", 0);
             segmentCount = parseIntOption(commandline, "segments", producerCount);
             segmentScaleKBps = parseIntOption(commandline, "segmentScaleKBps", 0);
@@ -309,6 +317,16 @@ public class PravegaPerfTest {
 
             if (streamName == null) {
                 throw new IllegalArgumentException("Error: Must specify stream Name");
+            }
+
+            if (retentionType != null && !retentionType.equalsIgnoreCase("TIME")
+                    && !retentionType.equalsIgnoreCase("SIZE")) {
+                throw new IllegalArgumentException("Error: Retention type can be TIME and SIZE only");
+            }
+
+            if (retentionType != null && retentionValue == 0) {
+                throw new IllegalArgumentException("Error: Must specify the retention value (for time it is no of " +
+                        "minutes and for size it is size in byte)");
             }
 
             if (producerCount == 0 && consumerCount == 0) {
@@ -434,7 +452,8 @@ public class PravegaPerfTest {
                     bgExecutor);
 
             streamHandle = new PravegaStreamHandler(scopeName, streamName, rdGrpName, controllerUri, segmentCount,
-                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor, createScope);
+                    segmentScaleKBps, segmentScaleEventsPerSecond, scaleFactor, TIMEOUT, controller, bgExecutor,
+                    createScope, retentionType, retentionValue);
 
             if (producerCount > 0 && segmentCount > 0 && !streamHandle.create()) {
                 if (recreate) {
@@ -514,6 +533,8 @@ public class PravegaPerfTest {
             return "streamName='" + streamName + '\'' +
                 ", rdGrpName='" + rdGrpName + '\'' +
                 ", scopeName='" + scopeName + '\'' +
+                ", retentionType=" + retentionType +
+                ", retentionValue=" + retentionValue +
                 ", recreate=" + recreate +
                 ", writeAndRead=" + writeAndRead +
                 ", producerCount=" + producerCount +
